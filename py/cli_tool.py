@@ -806,6 +806,7 @@ def validate_bash_command(command: str, cwd: str, mode: str = "default") -> Tupl
     if re.search(traversal_pattern, command):
         return False, "Path traversal detected (usage of '..' is blocked to keep agent in workspace)"
 
+    # ===== 2. 绝对路径与敏感目录防御 =====
     # 常见敏感目录前缀
     sensitive_roots = [
         r'/etc', r'/var', r'/root', r'/bin', r'/sbin', r'/usr',  # Linux
@@ -817,7 +818,7 @@ def validate_bash_command(command: str, cwd: str, mode: str = "default") -> Tupl
         # 匹配 空格+路径 或 开头+路径
         # 例如: "cat /etc/passwd" 或 "/etc/init.d/..."
         if re.search(r'(?:\s|^)' + root, command, re.IGNORECASE):
-            return False, f"Access to system directory '{root}' is blocked in {mode} mode"
+            return False, f"Access to system directory '{root}' is blocked"
 
     # 针对 cd 命令的额外保护：禁止 cd /... (除非是 /workspace 或 /tmp)
     # 拦截: cd /etc, cd /
@@ -825,6 +826,7 @@ def validate_bash_command(command: str, cwd: str, mode: str = "default") -> Tupl
     if re.search(r'\bcd\s+/(?!(workspace|tmp|dev/null))', command, re.IGNORECASE):
             return False, "Changing directory to outside workspace is blocked"
 
+    # ===== 3. 毁灭性操作（保持原样）=====
     destructive_patterns = [
         (r'rm\s+-rf\s*/', "Recursive delete root"),                
         (r'mkfs\.[a-z]+', "Filesystem format"),                    
@@ -837,16 +839,18 @@ def validate_bash_command(command: str, cwd: str, mode: str = "default") -> Tupl
         if re.search(pattern, command, re.IGNORECASE):
             return False, f"Destructive operation blocked: {reason}"
     
-    risk_patterns = [
-        # 允许 wget/curl，但禁止直接管道给 shell 执行 (如 curl | sh)
-        (r'(curl|wget).*\|\s*(sh|bash|zsh|python|perl|php)', "Remote execution via pipe"),
-        # 禁止访问环境变量 HOME，防止泄露主机用户目录
-        (r'\$\{?HOME\}?', "HOME env variable usage"),
-        (r'~\s*/', "Home directory access via ~"),
-    ]
-    for pattern, reason in risk_patterns:
-        if re.search(pattern, command, re.IGNORECASE):
-            return False, f"{reason} blocked in {mode} mode"
+    # ===== 4. 风险操作（非 YOLO 模式拦截）=====
+    if mode != "yolo":
+        risk_patterns = [
+            # 允许 wget/curl，但禁止直接管道给 shell 执行 (如 curl | sh)
+            (r'(curl|wget).*\|\s*(sh|bash|zsh|python|perl|php)', "Remote execution via pipe"),
+            # 禁止访问环境变量 HOME，防止泄露主机用户目录
+            (r'\$\{?HOME\}?', "HOME env variable usage"),
+            (r'~\s*/', "Home directory access via ~"),
+        ]
+        for pattern, reason in risk_patterns:
+            if re.search(pattern, command, re.IGNORECASE):
+                return False, f"{reason} blocked in {mode} mode"
     
     return True, command
 
