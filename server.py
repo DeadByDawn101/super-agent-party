@@ -899,6 +899,12 @@ async def dispatch_tool(tool_name: str, tool_params: dict, settings: dict) -> st
     )
     from py.random_topic import get_random_topics,get_categories
 
+    from py.task_tools import (
+        create_subtask,
+        query_task_progress,
+        cancel_subtask
+    )
+
     # ==================== 2. 定义工具映射表 ====================
     _TOOL_HOOKS = {
         "DDGsearch_async": DDGsearch_async,
@@ -979,6 +985,11 @@ async def dispatch_tool(tool_name: str, tool_params: dict, settings: dict) -> st
         "todo_write_tool_local": todo_write_tool_local,         # 本地任务管理
         "local_net_tool": local_net_tool,                       # 本地网络工具
         "read_skill_tool_local": read_skill_tool_local,         # 本地技能读取
+
+        # 任务中心工具（新增）
+        "create_subtask": create_subtask,
+        "query_task_progress": query_task_progress,
+        "cancel_subtask": cancel_subtask,
     }
     
     # ==================== 3. 权限拦截逻辑 (Human-in-the-loop) ====================
@@ -1017,7 +1028,7 @@ async def dispatch_tool(tool_name: str, tool_params: dict, settings: dict) -> st
         is_allowed = False
 
         # --- 规则 A: 全局 YOLO 模式 (Bypass Permissions) ---
-        if permission_mode == "yolo":
+        if permission_mode == "yolo" or permission_mode == "cowork":
             is_allowed = True
             
         # --- 规则 B: 自动批准模式 (Accept Edits) ---
@@ -1113,6 +1124,47 @@ async def dispatch_tool(tool_name: str, tool_params: dict, settings: dict) -> st
             else:
                 return str(result)
                 
+    # ==================== 5. 任务中心工具特殊处理 ====================
+    if tool_name in ["create_subtask", "query_task_progress", "cancel_subtask"]:
+        cli_settings = settings.get("CLISettings", {})
+        cwd = cli_settings.get("cc_path")
+        
+        if tool_name == "create_subtask":
+            # 读取共识文件（如果存在）
+            from pathlib import Path
+            import aiofiles
+            
+            consensus_content = None
+            consensus_file = Path(cwd) / ".agent" / "consensus.md"
+            if consensus_file.exists():
+                async with aiofiles.open(consensus_file, 'r', encoding='utf-8') as f:
+                    consensus_content = await f.read()
+            
+            result = await create_subtask(
+                title=tool_params.get("title"),
+                description=tool_params.get("description"),
+                agent_type=tool_params.get("agent_type", "default"),
+                workspace_dir=cwd,
+                settings=settings,  # 只需要传 settings
+                consensus_content=consensus_content
+            )
+            return result
+        
+        elif tool_name == "query_task_progress":
+            result = await query_task_progress(
+                workspace_dir=cwd,
+                parent_task_id=tool_params.get("parent_task_id"),
+                status=tool_params.get("status")
+            )
+            return result
+        
+        elif tool_name == "cancel_subtask":
+            result = await cancel_subtask(
+                workspace_dir=cwd,
+                task_id=tool_params.get("task_id")
+            )
+            return result
+
     if tool_name not in _TOOL_HOOKS:
         for server_name, mcp_client in mcp_client_list.items():
             if tool_name in mcp_client._conn.tools:
@@ -1136,6 +1188,7 @@ async def dispatch_tool(tool_name: str, tool_params: dict, settings: dict) -> st
     except Exception as e:
         logger.error(f"Error calling tool {tool_name}: {e}")
         return f"Error calling tool {tool_name}: {e}"
+
 class ChatRequest(BaseModel):
     messages: List[Dict]
     model: str = None
@@ -1151,6 +1204,9 @@ class ChatRequest(BaseModel):
     asyncToolsID: List[str] = None
     reasoning_effort: str = None
     is_app_bot: bool = False
+    is_sub_agent: bool = False
+    enable_tools : List[str] = None
+    disable_tools: List[str] = None
 
 async def message_without_images(messages: List[Dict]) -> List[Dict]:
     if messages:
@@ -1995,6 +2051,13 @@ async def generate_stream_response(client,reasoner_client, request: ChatRequest,
     from py.cli_tool import claude_code_tool,qwen_code_tool,get_tools_for_mode,get_local_tools_for_mode
     from py.cdp_tool import all_cdp_tools
     from py.random_topic import random_topics_tools
+
+    from py.task_tools import (
+        create_subtask_tool,
+        query_tasks_tool,
+        cancel_subtask_tool
+    )
+
     m0 = None
     memoryId = None
     if settings["memorySettings"]["is_memory"] and settings["memorySettings"]["selectedMemory"] and settings["memorySettings"]["selectedMemory"] != "":
@@ -2171,6 +2234,103 @@ async def generate_stream_response(client,reasoner_client, request: ChatRequest,
                         },
                     }
                     tools.append(comfyui_tool)
+        # ==================== 获取权限模式 ====================
+        cli_settings = settings.get("CLISettings", {})
+        engine = cli_settings.get("engine", "")
+        
+        # 根据环境类型获取权限模式
+        if engine == "local":
+            env_settings = settings.get("localEnvSettings", {})
+        elif engine == "ds":
+            env_settings = settings.get("dsSettings", {})
+        elif engine == "cc":
+            env_settings = settings.get("ccSettings", {})
+        elif engine == "qc":
+            env_settings = settings.get("qcSettings", {})
+        else:
+            env_settings = {}
+        
+        permission_mode = env_settings.get("permissionMode", "default")
+        if permission_mode == "cowork":
+            tools.append(create_subtask_tool)
+            tools.append(query_tasks_tool)
+            tools.append(cancel_subtask_tool)
+
+
+        # 如果是子智能体调用，或者指定了工具过滤规则
+        if request.is_sub_agent or request.enable_tools or request.disable_tools:
+            original_tool_count = len(tools)
+            
+            # 1. Enable Tools 过滤（白名单模式）
+            if request.enable_tools and len(request.enable_tools) > 0:
+                # 只保留白名单中的工具
+                filtered_tools = []
+                enable_set = set(request.enable_tools)
+                
+                for tool in tools:
+                    tool_name = tool.get("function", {}).get("name", "")
+                    if tool_name in enable_set:
+                        filtered_tools.append(tool)
+                
+                tools = filtered_tools
+                print(f"[Tool Filter] Enable mode: {original_tool_count} -> {len(tools)} tools (enabled: {request.enable_tools})")
+            
+            # 2. Disable Tools 过滤（黑名单模式）
+            elif request.disable_tools and len(request.disable_tools) > 0:
+                # 移除黑名单中的工具
+                disable_set = set(request.disable_tools)
+                filtered_tools = []
+                
+                for tool in tools:
+                    tool_name = tool.get("function", {}).get("name", "")
+                    if tool_name not in disable_set:
+                        filtered_tools.append(tool)
+                
+                tools = filtered_tools
+                print(f"[Tool Filter] Disable mode: {original_tool_count} -> {len(tools)} tools (disabled: {request.disable_tools})")
+            
+            # 3. 子智能体默认策略（如果没有指定 enable/disable）
+            elif request.is_sub_agent:
+                # 子智能体默认只保留安全的工具，移除高风险操作
+                SUBAGENT_BLOCKED_TOOLS = [
+                    # 阻止子智能体执行系统命令
+                    "docker_sandbox_async",
+                    "bash_tool_local",
+                    "claude_code_async",
+                    "qwen_code_async",
+                    
+                    # 阻止子智能体管理进程/端口
+                    "manage_processes_tool",
+                    "docker_manage_ports_tool",
+                    "local_net_tool",
+                    
+                    # 阻止子智能体创建子任务（防止递归）
+                    "create_subtask",
+                    
+                    # 阻止高风险的浏览器操作
+                    "new_page",
+                    "close_page",
+                    "evaluate_script",
+                    
+                    # 阻止子智能体使用 Agent 调用（防止复杂的嵌套）
+                    "agent_tool_call",
+                    "a2a_tool_call",
+                ]
+                
+                filtered_tools = []
+                blocked_count = 0
+                
+                for tool in tools:
+                    tool_name = tool.get("function", {}).get("name", "")
+                    if tool_name not in SUBAGENT_BLOCKED_TOOLS:
+                        filtered_tools.append(tool)
+                    else:
+                        blocked_count += 1
+                
+                tools = filtered_tools
+                print(f"[SubAgent Safety] Blocked {blocked_count} dangerous tools: {original_tool_count} -> {len(tools)} tools")
+    
+
         print(tools)
         source_prompt = ""
         if request.fileLinks:
@@ -4603,6 +4763,12 @@ async def execute_tool_manually(request: Request):
     )
     from py.random_topic import get_random_topics,get_categories
 
+    from py.task_tools import (
+        create_subtask,
+        query_task_progress,
+        cancel_subtask
+    )
+
     # ==================== 2. 定义工具映射表 ====================
     _TOOL_HOOKS = {
         "DDGsearch_async": DDGsearch_async,
@@ -4683,6 +4849,12 @@ async def execute_tool_manually(request: Request):
         "todo_write_tool_local": todo_write_tool_local,         # 本地任务管理
         "local_net_tool": local_net_tool,                       # 本地网络工具
         "read_skill_tool_local": read_skill_tool_local,         # 本地技能读取
+
+        # 任务中心工具（新增）
+        "create_subtask": create_subtask,
+        "query_task_progress": query_task_progress,
+        "cancel_subtask": cancel_subtask,
+
     }
     
     if tool_name not in _TOOL_HOOKS:
@@ -4691,6 +4863,28 @@ async def execute_tool_manually(request: Request):
     tool_func = _TOOL_HOOKS[tool_name]
     
     try:
+        if tool_name in ["create_subtask", "query_task_progress", "cancel_subtask"]:
+            cwd = settings.get("CLISettings", {}).get("cc_path")
+            
+            if tool_name == "create_subtask":
+                from pathlib import Path
+                import aiofiles
+                
+                consensus_content = None
+                consensus_file = Path(cwd) / ".agent" / "consensus.md"
+                if consensus_file.exists():
+                    async with aiofiles.open(consensus_file, 'r', encoding='utf-8') as f:
+                        consensus_content = await f.read()
+                
+                tool_params.update({
+                    "workspace_dir": cwd,
+                    "settings": settings,
+                    "consensus_content": consensus_content
+                })
+            
+            elif tool_name in ["query_task_progress", "cancel_subtask"]:
+                tool_params["workspace_dir"] = cwd
+
         # 2. 执行工具
         result = await tool_func(**tool_params)
         
