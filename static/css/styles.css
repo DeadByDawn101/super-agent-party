@@ -8397,3 +8397,148 @@ hr.footnotes-sep {
 .event-row-item .el-textarea {
   display: block;
 }
+
+/* 任务中心容器 */
+.task-center-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background-color: var(--el-bg-color);
+}
+
+/* 头部导航条 */
+.task-center-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px;
+  border-bottom: 1px solid var(--el-border-color-light);
+  background-color: var(--el-bg-color);
+  flex-shrink: 0;
+}
+
+.header-title {
+  font-weight: 600;
+  font-size: 16px;
+  color: var(--el-text-color-primary);
+}
+
+/* 内容滚动区 */
+.task-content-wrapper {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+}
+
+/* 空状态 */
+.task-empty-state {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+.empty-tip {
+  color: var(--el-text-color-secondary);
+  margin-bottom: 15px;
+  font-size: 13px;
+}
+
+/* 任务列表工具栏 */
+.task-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+.toolbar-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+}
+
+/* 任务卡片 */
+.task-card-item {
+  margin-bottom: 12px;
+}
+
+.task-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 8px;
+}
+
+.task-title-row {
+  flex: 1;
+  overflow: hidden;
+  margin-right: 8px;
+}
+
+.task-title {
+  font-weight: 600;
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+}
+
+.task-card-desc {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  line-height: 1.5;
+  margin-bottom: 10px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.task-progress-bar {
+  margin-bottom: 10px;
+}
+
+.task-card-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 8px;
+  border-top: 1px solid var(--el-border-color-lighter);
+}
+
+.task-meta-info {
+  display: flex;
+  gap: 10px;
+  font-size: 11px;
+  color: var(--el-text-color-placeholder);
+}
+
+.task-actions .el-button {
+  padding: 0 4px;
+}
+
+/* 特殊样式：任务中心入口卡片 */
+.task-center-card {
+    border-left: 4px solid var(--el-color-primary) !important;
+    background-color: var(--el-bg-color-page) !important;
+}
+
+.el-card {
+    border: 1px solid var(--el-border-color) !important;
+    border-radius: 6px !important;
+    background-color: var(--el-bg-color-page) !important;
+}
+
+/* 强制将该按钮下的图标设为白色 */
+.white-icon-btn i {
+    color: white !important;
+    /* 可选：增加一点悬停时的透明度变化，让它看起来有交互感 */
+    transition: opacity 0.2s;
+}
+
+.white-icon-btn:hover i {
+    opacity: 0.8;
+}

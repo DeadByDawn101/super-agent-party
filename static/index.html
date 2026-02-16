@@ -622,6 +622,15 @@ function updateElement(el, rawMarkdown, formatFn) {
             </div>
           </el-card>
           
+          <el-card 
+            class="extension-card task-center-card"
+            @click="openTaskCenter()">
+            <div class="extension-info">
+              <h3>{{ t('taskCenter') }}</h3>
+              <p>{{ t('taskCenterDescription') }}</p>
+            </div>
+          </el-card>
+
           <!-- 分隔线 -->
           <div class="extensions-divider" v-if="extensions.length > 0">
             <span>
@@ -1365,78 +1374,158 @@ function updateElement(el, rawMarkdown, formatFn) {
                 ref="sidePanelRef"
                 :class="{ collapsed: !sidePanelOpen }" 
                 v-show="sidePanelOpen">
+              
               <div class="side-panel-scroll" ref="messagesPanel" :style="{ overflow: 'hidden' }">
+                
+                <!-- 1. 任务中心视图 -->
+                <div v-if="activeSideView === 'tasks'" class="task-center-container">
+                    <div class="task-center-header">
+                        <el-button link @click="closeTaskCenter">
+                            <i class="fa-solid fa-chevron-left"></i> {{ t('back') }}
+                        </el-button>
+                        <span class="header-title">{{ t('taskCenter') }}</span>
+                        <div style="width: 40px;"></div>
+                    </div>
+
+                    <div class="task-content-wrapper">
+                        <!-- 状态 A: 未配置工作区 -->
+                        <div v-if="!hasWorkspacePath" class="task-empty-state">
+                            <el-empty :description="t('noWorkspaceConfigured')">
+                                <template #image>
+                                    <i class="fa-solid fa-folder-minus" style="font-size: 48px; color: var(--el-text-color-secondary);"></i>
+                                </template>
+                                <p class="empty-tip">{{ t('taskCenterNeedsCLI') }}</p>
+                                <el-button type="primary" @click="jumpToCLIConfig">
+                                    {{ t('goToCLIConfig') }}
+                                </el-button>
+                            </el-empty>
+                        </div>
+
+                        <!-- 状态 B: 任务列表 -->
+                        <div v-else class="task-list-wrapper">
+                            <div class="task-toolbar">
+                                <span class="toolbar-title">{{ t('taskList') }} ({{ taskList.length }})</span>
+                                <el-button type="primary" size="small" circle @click="showCreateTaskDialog = true">
+                                    <i class="fa-solid fa-plus"></i>
+                                </el-button>
+                            </div>
+
+                            <el-empty v-if="taskList.length === 0" :description="t('noTasks')"></el-empty>
+
+                            <div v-for="task in taskList" :key="task.task_id" class="task-card-item">
+                                <el-card shadow="hover" :body-style="{ padding: '12px' }">
+                                    <div class="task-card-header">
+                                        <div class="task-title-row">
+                                            <span class="task-title" :title="task.title">{{ task.title }}</span>
+                                        </div>
+                                        <el-tag size="small" :type="getTaskStatusType(task.status)">
+                                            {{ task.status }}
+                                        </el-tag>
+                                    </div>
+
+                                    <div class="task-card-desc">{{ task.description }}</div>
+
+                                    <div class="task-progress-bar" v-if="task.status === 'running'">
+                                        <el-progress :percentage="task.progress" :stroke-width="4" :show-text="false" status="success"></el-progress>
+                                    </div>
+
+                                    <div class="task-card-footer">
+                                        <div class="task-meta-info">
+                                            <span class="task-time"><i class="fa-regular fa-clock"></i> {{ formatTaskTime(task.created_at) }}</span>
+                                            <span class="task-rounds" v-if="task.status === 'running' || task.status === 'completed'">
+                                                {{ task.progress }}%
+                                            </span>
+                                        </div>
+                                        
+                                        <div class="task-actions">
+                                            <el-tooltip :content="t('viewResult')" placement="top" v-if="task.result">
+                                                <el-button class="white-icon-btn" type="primary" link size="small" @click="openTaskResult(task)">
+                                                    <i class="fa-solid fa-eye"></i>
+                                                </el-button>
+                                            </el-tooltip>
+
+                                            <el-tooltip :content="t('stopTask')" placement="top" v-if="['pending', 'running'].includes(task.status)">
+                                                <el-button type="warning" link size="small" @click="handleCancelTask(task.task_id)">
+                                                    <i class="fa-solid fa-stop"></i>
+                                                </el-button>
+                                            </el-tooltip>
+                                            
+                                            <el-tooltip :content="t('DeleteTask')" placement="top">
+                                                <el-button type="danger" link size="small" @click="handleDeleteTask(task.task_id)">
+                                                    <i class="fa-solid fa-trash-can"></i>
+                                                </el-button>
+                                            </el-tooltip>
+                                        </div>
+                                    </div>
+                                </el-card>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2. 扩展 Iframe 视图 -->
                 <iframe class="side-panel-iframe" 
-                        v-if="sidePanelURL" 
+                        v-else-if="sidePanelURL" 
                         :src="sidePanelURL" 
                         frameborder="0" 
                         allowfullscreen 
                         style="width: 100%; height: 100%;">
                 </iframe>
+
+                <!-- 3. 加载中状态 -->
                 <div v-else-if="currentExtension" class="loading-container">
                   <div class="loading-content">
                     <i class="fa-solid fa-spinner fa-spin loading-icon"></i>
                     <p class="loading-text">{{t('waitForLoadingExt')}}</p>
                   </div>
                 </div>
-                <div v-else class="extensions-list" style="margin: 10px;height: 100%;">
-                  <!-- 默认视图选项 -->
+
+                <!-- 4. 扩展列表视图 -->
+                <div v-else class="extensions-list" style="margin: 10px; height: 100%;">
                   <el-card 
                     class="extension-card default-view-card"
-                    :class="{ active: currentExtension === null }"
+                    :class="{ active: currentExtension === null && activeSideView === 'list' }"
                     @click="resetToDefaultView()">
                     <div class="extension-info">
                       <h3>{{ t('defaultView') }}</h3>
                       <p>{{ t('defaultViewDescription') }}</p>
                     </div>
                   </el-card>
+
+                  <el-card 
+                    class="extension-card task-center-card"
+                    @click="openTaskCenter()">
+                    <div class="extension-info">
+                      <h3>{{ t('taskCenter') }}</h3>
+                      <p>{{ t('taskCenterDescription') }}</p>
+                    </div>
+                  </el-card>
                   
-                  <!-- 分隔线 -->
                   <div class="extensions-divider" v-if="extensions.length > 0">
                     <span>
                       {{ t('availableExtensions') }}
-                      <el-link
-                        type="primary"
-                        :underline="false"
-                        href="#" 
-                        @click.stop.prevent="switchToExtensionPage" 
-                      >
-                        <el-icon class="mr-1">
-                          <i class="fa-solid fa-puzzle-piece"></i>
-                        </el-icon>{{ t('goToExtensionPage') }}
+                      <el-link type="primary" :underline="false" href="#" @click.stop.prevent="switchToExtensionPage">
+                        <el-icon class="mr-1"><i class="fa-solid fa-puzzle-piece"></i></el-icon>{{ t('goToExtensionPage') }}
                       </el-link>
                     </span>
                   </div>
-                  <!-- 扩展列表 -->
+
                   <el-empty v-if="extensions.length === 0" :description="t('noExtensionsFound')" ></el-empty>
-                    <el-card
+                  <el-card
                       v-for="ext in extensions"
                       :key="ext.id"
                       class="extension-card"
                       :class="{ active: currentExtension && currentExtension.id === ext.id }"
                       @click="switchExtension(ext)">
                       
-                      <!-- 右上角图标 -->
                       <div class="btn-top-right">
                         <el-tooltip :content="t('openExtensionInBrowser')" placement="top">
-                          <!-- 浏览器打开按钮 -->
-                          <el-button
-                            type="default"
-                            circle
-                            size="small"
-                            @click.stop="openExtension(ext)">
+                          <el-button type="default" circle size="small" @click.stop="openExtension(ext)">
                             <i class="fa-solid fa-external-link"></i>
                           </el-button>
                         </el-tooltip>
                         <el-tooltip :content="t('openExtensionInWindow')" placement="top">
-                          <!-- 独立窗口打开按钮（仅在Electron环境下显示） -->
-                          <el-button
-                            v-if="isElectron"
-                            type="primary"
-                            circle
-                            size="small"
-                            @click.stop="openExtensionInWindow(ext)"
-                            style="margin-left: 8px;">
+                          <el-button v-if="isElectron" type="primary" circle size="small" @click.stop="openExtensionInWindow(ext)" style="margin-left: 8px;">
                             <i class="fa-solid fa-window-restore"></i>
                           </el-button>
                         </el-tooltip>
@@ -1450,10 +1539,56 @@ function updateElement(el, rawMarkdown, formatFn) {
                           <span>{{ ext.author }}</span>
                         </div>
                       </div>
-                    </el-card>
+                  </el-card>
                 </div>
               </div>
             </div>
+
+            <!-- 任务结果 Dialog -->
+            <el-dialog
+              v-model="showTaskResultDialog"
+              :title="selectedTaskTitle"
+              width="80%"
+              class="task-result-dialog"
+              append-to-body
+              destroy-on-close
+            >
+              <div class="task-result-content markdown-body">
+                <div v-html="formatMessage(selectedTaskResult)"></div>
+              </div>
+              <template #footer>
+                <el-button @click="showTaskResultDialog = false">{{ t('close') }}</el-button>
+              </template>
+            </el-dialog>
+
+            <!-- 创建任务 Dialog -->
+            <el-dialog
+              v-model="showCreateTaskDialog"
+              :title="t('createNewTask')"
+              width="500px"
+              destroy-on-close
+              append-to-body
+            >
+              <el-form :model="newTaskForm" label-position="top">
+                <el-form-item :label="t('taskTitle')">
+                  <el-input v-model="newTaskForm.title" :placeholder="t('taskTitlePlaceholder')"></el-input>
+                </el-form-item>
+                <el-form-item :label="t('taskDescription')">
+                  <el-input 
+                    v-model="newTaskForm.description" 
+                    type="textarea" 
+                    :rows="6"
+                    :placeholder="t('taskDescPlaceholder')"
+                  ></el-input>
+                </el-form-item>
+              </el-form>
+              <template #footer>
+                <span class="dialog-footer">
+                  <el-button @click="showCreateTaskDialog = false">{{ t('cancel') }}</el-button>
+                  <el-button type="primary" :loading="isCreatingTask" @click="submitCreateTask">{{ t('createAndRun') }}</el-button>
+                </span>
+              </template>
+            </el-dialog>
           </div>
           <!-- 群聊设置弹窗 -->
           <el-dialog

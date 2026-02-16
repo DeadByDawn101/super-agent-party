@@ -103,9 +103,10 @@ class TaskCenter:
         progress: int,
         status: Optional[TaskStatus] = None,
         result: Optional[str] = None,
-        error: Optional[str] = None
+        error: Optional[str] = None,
+        context: Optional[Dict[str, Any]] = None  # 👈 新增参数
     ) -> bool:
-        """更新任务进度"""
+        """更新任务进度和上下文"""
         async with self._lock:
             task = await self.get_task(task_id)
             if not task:
@@ -127,10 +128,14 @@ class TaskCenter:
             if error is not None:
                 task.error = error
                 task.status = TaskStatus.FAILED
+
+            # ⭐ 核心逻辑：合并或更新 context
+            if context is not None:
+                task.context.update(context) # 使用 update 保证不覆盖掉原有的其他 context 数据
             
             await self._save_task(task)
             return True
-    
+
     async def list_tasks(
         self,
         parent_task_id: Optional[str] = None,
@@ -198,6 +203,19 @@ class TaskCenter:
             status=TaskStatus.CANCELLED
         )
     
+    async def delete_task(self, task_id: str) -> bool:
+        """删除任务文件"""
+        async with self._lock:
+            task_file = self._get_task_file(task_id)
+            if task_file.exists():
+                try:
+                    await aiofiles.os.remove(task_file)
+                    return True
+                except Exception as e:
+                    print(f"Error deleting task {task_id}: {e}")
+                    return False
+            return False
+
     async def cleanup_old_tasks(self, days: int = 7):
         """清理旧任务（可选功能）"""
         # 实现清理逻辑...

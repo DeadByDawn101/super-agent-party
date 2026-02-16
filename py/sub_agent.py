@@ -24,7 +24,7 @@ class SubAgentExecutor:
         consensus_content: Optional[str] = None,
         max_iterations: int = 15
     ) -> Dict[str, Any]:
-        """执行子任务的主循环"""
+        """执行子任务的主循环 - 增强版"""
         task_center = await get_task_center(self.workspace_dir)
         task = await task_center.get_task(task_id)
         
@@ -41,61 +41,53 @@ class SubAgentExecutor:
         iteration = 0
         conversation_history = []
         
-        # 构建初始系统提示
+        # 1. 构建初始上下文
         system_prompt = self._build_system_prompt(task, consensus_content)
-        conversation_history.append({
-            "role": "system",
-            "content": system_prompt
-        })
+        conversation_history.append({"role": "system", "content": system_prompt})
         
-        # 初始用户消息
-        initial_message = f"""请执行以下任务：
-
-{task.description}
-
-要求：
-1. 专注完成任务目标
-2. 使用所有可用工具
-3. 完成后直接给出结果
-"""
-        conversation_history.append({
-            "role": "user",
-            "content": initial_message
-        })
+        initial_user_msg = f"请执行以下任务：\n\n{task.description}\n\n要求：完成后请整理出最终结果。"
+        conversation_history.append({"role": "user", "content": initial_user_msg})
         
         try:
-            # 增加超时时间，防止长思考/工具执行导致断连
             async with httpx.AsyncClient(timeout=600.0) as http_client:
                 while iteration < max_iterations:
                     iteration += 1
-                    current_progress = int((iteration / max_iterations) * 70)
+                    # 计算展示进度 (10% - 90%)
+                    current_progress = 10 + int((iteration / max_iterations) * 80)
                     
-                    await task_center.update_task_progress(
-                        task_id=task_id,
-                        progress=current_progress,
-                        status=TaskStatus.RUNNING
-                    )
+                    print(f"[SubAgent] Task {task_id} - Iteration {iteration}")
                     
-                    print(f"[SubAgent] Task {task_id} - Iteration {iteration} (Streaming)")
-                    
-                    # ---------------------------------------------------------
-                    # ⭐ 核心修改：只负责发消息和收文本，不做任何工具处理
-                    # ---------------------------------------------------------
+                    # 2. 调用 LLM 获取助手回复 (流式接收文本)
                     assistant_response = await self._call_llm_stream_only(
                         http_client=http_client,
                         messages=conversation_history,
-                        model='super-model' # 你的后端逻辑会接管这个请求
+                        model='super-model'
                     )
                     
-                    # 记录助手回复
+                    # 3. 记录到内存完整历史中（用于给模型维持上下文）
                     conversation_history.append({
                         "role": "assistant",
                         "content": assistant_response
                     })
                     
-                    # ---------------------------------------------------------
-                    # 智能判断任务是否完成（非流式，快速判断）
-                    # ---------------------------------------------------------
+                    # 4. ⭐ 提取助手内容并同步到 JSON 的 context['history']
+                    # 只提取 assistant 的消息内容
+                    assistant_only_history = [
+                        m["content"] for m in conversation_history 
+                        if m["role"] == "assistant" and m["content"]
+                    ]
+                    
+                    await task_center.update_task_progress(
+                        task_id=task_id,
+                        progress=current_progress,
+                        status=TaskStatus.RUNNING,
+                        context={
+                            "history": assistant_only_history,
+                            "current_iteration": iteration
+                        }
+                    )
+                    
+                    # 5. 智能判断任务是否完成
                     is_complete = await self._check_task_completion_smart(
                         task=task,
                         conversation_history=conversation_history,
@@ -103,28 +95,25 @@ class SubAgentExecutor:
                     )
                     
                     if is_complete:
-                        print(f"[SubAgent] Task {task_id} - Completed")
+                        print(f"[SubAgent] Task {task_id} - Completed internally. Extracting final result...")
                         
-                        await task_center.update_task_progress(
-                            task_id=task_id,
-                            progress=90,
-                            status=TaskStatus.RUNNING
-                        )
-                        
-                        # 提取结果和摘要
+                        # 6. ⭐ 提取最终结果和摘要
                         result_dict = await self._extract_final_result(
                             task=task,
                             conversation_history=conversation_history,
                             http_client=http_client
                         )
 
-                        task.context['summary'] = result_dict['summary']
-                        
+                        # 最终更新：填入 result，保存 summary 和 完整的助手历史
                         await task_center.update_task_progress(
                             task_id=task_id,
                             progress=100,
                             status=TaskStatus.COMPLETED,
-                            result=result_dict['full']
+                            result=result_dict['full'], # 只有这里会写入最终结果
+                            context={
+                                "summary": result_dict['summary'],
+                                "history": assistant_only_history # 最终的历史记录
+                            }
                         )
 
                         return {
@@ -135,24 +124,25 @@ class SubAgentExecutor:
                             "iterations": iteration
                         }
 
-                    # 未完成，继续催促（这会让后端 Agent 继续下一轮思考）
+                    # 未完成，添加用户指令引导下一轮
                     conversation_history.append({
                         "role": "user",
-                        "content": "请继续执行下一步。"
+                        "content": "请继续执行任务。如果已完成所有步骤，请总结并给出最终结果。"
                     })
                 
-                # 超时处理
+                # 循环结束（达到最大次数）
+                error_msg = f"超过最大迭代次数({max_iterations})，任务强制结束。"
                 await task_center.update_task_progress(
                     task_id=task_id,
                     progress=100,
                     status=TaskStatus.FAILED,
-                    error=f"超过最大迭代次数({max_iterations})"
+                    error=error_msg
                 )
-                return {"success": False, "error": "Max iterations reached"}
+                return {"success": False, "error": error_msg}
 
         except Exception as e:
-            error_msg = f"执行出错: {str(e)}"
-            print(f"[SubAgent] Critical Error: {error_msg}")
+            error_msg = f"执行过程中发生异常: {str(e)}"
+            print(f"[SubAgent] Error: {error_msg}")
             await task_center.update_task_progress(
                 task_id=task_id,
                 progress=0,
@@ -274,19 +264,36 @@ class SubAgentExecutor:
         return False
     
     async def _extract_final_result(self, task, conversation_history, http_client) -> Dict[str, str]:
-        # 简化版提取逻辑
-        full_res = "提取失败"
-        try:
-            msgs = [{"role": "user", "content": f"基于历史对话提取任务【{task.description}】的最终结果："}]
-            # 这里需要把 history 塞进去，省略代码...
-            # 为简单起见，直接取最后一条 assistant 消息
-            for msg in reversed(conversation_history):
-                if msg["role"] == "assistant":
-                    full_res = msg["content"]
-                    break
-        except: pass
+        """使用 AI 总结整个对话作为最终结果，确保不遗漏关键信息"""
         
-        summary = full_res[:100] + "..."
+        # 构建一个专门的 Prompt 让 AI 整理结果
+        history_str = ""
+        for msg in conversation_history:
+            if msg["role"] in ["assistant", "user"]:
+                content = msg["content"] if msg["content"] else "[执行了工具操作]"
+                history_str += f"{msg['role']}: {content}\n"
+
+        msgs = [
+            {"role": "system", "content": "你是一个结果提取专家。请从对话历史中提取出任务的【最终执行结果】。去除所有过程描述和“任务已完成”之类的废话，保留核心干货（如报告内容、代码、分析结果）。"},
+            {"role": "user", "content": f"任务目标：{task.description}\n\n对话历史：\n{history_str[-6000:]}\n\n请给出最终结果："}
+        ]
+        
+        full_res = "未提取到结果"
+        try:
+            resp = await http_client.post(
+                self.simple_chat_endpoint, 
+                json={"messages": msgs, "model": "super-model", "stream": False}
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                full_res = data["choices"][0]["message"]["content"].strip()
+        except Exception as e:
+            print(f"提取失败: {e}")
+            # 降级方案：合并所有助手的文本
+            full_res = "\n".join([m["content"] for m in conversation_history if m["role"] == "assistant" and m["content"]])
+
+        # 生成一个更智能的摘要
+        summary = full_res[:200].replace("\n", " ") + "..."
         return {"full": full_res, "summary": summary}
 
     def _get_recent_conversation(self, conversation_history: List[Dict]) -> str:

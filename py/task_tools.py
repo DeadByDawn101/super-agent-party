@@ -80,23 +80,9 @@ query_tasks_tool = {
         "name": "query_task_progress",
         "description": """查询任务中心的所有任务进度和状态。
 
-返回信息：
-- ⏳ pending: 等待执行
-- 🔄 running: 正在执行中
-- ✅ completed: 已完成（可查看结果）
-- ❌ failed: 执行失败（可查看错误信息）
-- 🚫 cancelled: 已取消
-
-每个任务包含：
-- 任务ID、标题、状态
-- 进度百分比（0-100%）
-- 创建时间、最后更新时间
-- 执行结果或错误信息（如有）
-
 💡 使用建议：
-- 创建子任务后，定期查询进度
-- 在回复用户前，先确认所有相关子任务已完成
-- 如果子任务失败，分析错误并决定是否重试或调整策略""",
+1. 默认情况下，此工具只返回任务的【摘要】以节省上下文。
+2. 如果某个任务显示 'completed'，但你想查看它的【详细报告/完整结果】，请将 verbose 参数设为 true。""",
         "parameters": {
             "type": "object",
             "properties": {
@@ -108,6 +94,11 @@ query_tasks_tool = {
                     "type": "string",
                     "description": "可选：过滤特定状态的任务",
                     "enum": ["pending", "running", "completed", "failed", "cancelled"]
+                },
+                "verbose": {
+                    "type": "boolean",
+                    "description": "是否显示任务的完整结果。查看已完成任务的具体内容时非常有用。",
+                    "default": False
                 }
             }
         }
@@ -179,11 +170,13 @@ async def create_subtask(
 async def query_task_progress(
     workspace_dir: str,
     parent_task_id: Optional[str] = None,
-    status: Optional[str] = None
+    status: Optional[str] = None,
+    verbose: bool = False
 ) -> str:
-    """⭐ 查询任务进度 - 会话隔离版（只显示摘要）"""
-    task_center = await get_task_center(workspace_dir)
+    """查询任务进度 - 主智能体视角的全量查看版"""
+    from py.task_center import get_task_center, TaskStatus
     
+    task_center = await get_task_center(workspace_dir)
     status_enum = TaskStatus(status) if status else None
     
     tasks = await task_center.list_tasks(
@@ -192,49 +185,58 @@ async def query_task_progress(
     )
     
     if not tasks:
-        return "📋 当前没有任务"
+        return "📋 任务中心当前没有相关任务。"
     
-    result = f"📋 任务中心状态 (共 {len(tasks)} 个任务)\n\n"
-    
-    status_icons = {
-        "pending": "⏳",
-        "running": "🔄",
-        "completed": "✅",
-        "failed": "❌",
-        "cancelled": "🚫"
-    }
+    result_lines = [f"📋 任务中心状态 (共 {len(tasks)} 个任务)"]
+    if verbose:
+        result_lines.append("📢 [详情模式] 已开启：正在提取完整过程记录与最终产出...")
+    result_lines.append("-" * 30)
     
     for task in tasks:
-        icon = status_icons.get(task.status.value, "❓")
-        result += f"{icon} [{task.task_id}] {task.title}\n"
-        result += f"   状态: {task.status.value} | 进度: {task.progress}%\n"
+        icon = "✅" if task.status == TaskStatus.COMPLETED else "🔄" if task.status == TaskStatus.RUNNING else "⏳"
+        result_lines.append(f"{icon} [{task.task_id}] {task.title}")
+        result_lines.append(f"   状态: {task.status.value.upper()} | 进度: {task.progress}%")
         
-        # ⭐ 关键改进：完成的任务只显示摘要
-        if task.status == TaskStatus.COMPLETED:
-            # 尝试从 context 中获取摘要
-            summary = task.context.get('summary')
-            
-            if summary:
-                result += f"   📝 摘要: {summary}\n"
+        # 获取 context 中的历史记录
+        history = task.context.get("history", [])
+        
+        # --- 情况 1：任务正在运行 ---
+        if task.status == TaskStatus.RUNNING:
+            if history:
+                # 即使不是 verbose，也给主智能体看最后一步，让它放心
+                result_lines.append(f"   执行动态: {history[-1][:100]}...")
+            if verbose and history:
+                # 全量模式下，列出已完成的所有中间步骤
+                result_lines.append("   📜 已完成步骤:")
+                for i, step in enumerate(history, 1):
+                    result_lines.append(f"     {i}. {step[:200]}...")
+
+        # --- 情况 2：任务已完成 ---
+        elif task.status == TaskStatus.COMPLETED:
+            if verbose:
+                # 1. 展示中间思考/执行过程 (History)
+                if history:
+                    result_lines.append("   📜 执行过程回溯:")
+                    for i, step in enumerate(history, 1):
+                        # 缩进显示每一轮助手干了什么
+                        step_fmt = step.replace('\n', '\n        ')
+                        result_lines.append(f"     第 {i} 阶段产出:\n        {step_fmt}")
+                        result_lines.append("        " + "-"*10)
+                
+                # 2. 展示最终核心结果 (Result)
+                result_lines.append(f"   🎯 最终完整产出:\n{task.result}\n")
             else:
-                # 降级：显示 result 的前 150 字
-                if task.result:
-                    short_result = task.result[:150]
-                    if len(task.result) > 150:
-                        short_result += "..."
-                    result += f"   📝 结果: {short_result}\n"
-            
-            # 提示：完整结果在哪里
-            result += f"   💡 完整结果保存在: .agent/tasks/{task.task_id}.json\n"
-        
-        if task.status == TaskStatus.FAILED and task.error:
-            result += f"   ❌ 错误: {task.error}\n"
-        
-        result += f"   创建: {task.created_at.split('T')[0]} {task.created_at.split('T')[1][:8]}\n"
-        result += f"   更新: {task.updated_at.split('T')[0]} {task.updated_at.split('T')[1][:8]}\n"
-        result += "\n"
-    
-    return result
+                # 非全量模式下只给摘要
+                summary = task.context.get('summary') or (task.result[:150] + "..." if task.result else "无结果内容")
+                result_lines.append(f"   📝 结果摘要: {summary}")
+                result_lines.append(f"   💡 (提示: 使用 verbose=true 可查看包含执行过程的完整报告)")
+
+        elif task.status == TaskStatus.FAILED:
+            result_lines.append(f"   ❌ 错误信息: {task.error}")
+
+        result_lines.append("") # 任务间的空行
+
+    return "\n".join(result_lines)
 
 async def cancel_subtask(workspace_dir: str, task_id: str) -> str:
     """取消子任务"""

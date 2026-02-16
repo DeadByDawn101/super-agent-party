@@ -1532,7 +1532,7 @@ async def tools_change_messages(request: ChatRequest, settings: dict):
             permission_message = "你当前处于执行模式，你可以自由地使用所有工具，但请注意不要滥用权限！如果有更安全的工具，请不要直接使用bash命令！"
             content_append(request.messages, 'system', permission_message)
         elif permissionMode == "cowork":
-            permission_message = "你当前处于协作阶段，你可以将复杂任务拆解成多个简单子任务，交给子智能体执行，这些子智能体将在后台异步执行这些任务，当你创建任务后，请不要查询这些任务的结果，因为它们可能还在执行中，请当用户询问时再查询任务进度即可!"
+            permission_message = "你当前处于协作阶段，你可以将复杂任务拆解成多个简单子任务，交给子智能体执行，这些子智能体将在后台异步执行这些任务，当你创建任务后，请不要查询这些任务的结果，因为它们可能还在执行中，请当用户询问时再查询任务进度即可!当你需要调用工具时，尽可能的使用子任务来执行，这样可以避免直接调用工具阻塞对话！"
             content_append(request.messages, 'system', permission_message)
         else:
             permission_message = "你当前处于计划模式，请尽可能只使用只读工具了解当前项目，使用自然语言描述你的需求和计划，并等待用户确认后再执行！"
@@ -5233,6 +5233,100 @@ async def simple_chat_endpoint(request: ChatRequest):
         media_type="text/plain",      # 也可以保持 "text/event-stream"
         headers={"Cache-Control": "no-cache"}
     )
+
+
+from py.task_center import get_task_center
+from py.sub_agent import run_subtask_in_background
+
+# --- 新增任务中心 API ---
+
+class TaskCreateRequest(BaseModel):
+    title: str
+    description: str
+    agent_type: str = "default"
+
+@app.get("/v1/tasks/list")
+async def list_tasks_endpoint():
+    """获取当前工作区的所有任务"""
+    current_settings = await load_settings()
+    workspace_dir = current_settings.get("CLISettings", {}).get("cc_path")
+    
+    if not workspace_dir:
+        return {"tasks": [], "error": "No workspace configured"}
+        
+    try:
+        task_center = await get_task_center(workspace_dir)
+        tasks = await task_center.list_tasks()
+        return {"tasks": [t.model_dump() for t in tasks]}
+    except Exception as e:
+        return {"tasks": [], "error": str(e)}
+
+@app.post("/v1/tasks/create")
+async def create_task_endpoint(req: TaskCreateRequest):
+    """手动创建任务"""
+    current_settings = await load_settings()
+    workspace_dir = current_settings.get("CLISettings", {}).get("cc_path")
+    
+    if not workspace_dir:
+        raise HTTPException(status_code=400, detail="工作区路径未配置，请先在工具箱-CLI中设置")
+
+    try:
+        # 1. 获取任务中心
+        task_center = await get_task_center(workspace_dir)
+        
+        # 2. 创建任务记录
+        task = await task_center.create_task(
+            title=req.title,
+            description=req.description,
+            agent_type=req.agent_type,
+            parent_task_id="MANUAL_USER" # 标记为用户手动创建
+        )
+        
+        # 3. 读取共识文件（可选）
+        consensus_content = None
+        consensus_file = Path(workspace_dir) / ".agent" / "consensus.md"
+        if consensus_file.exists():
+            import aiofiles
+            async with aiofiles.open(consensus_file, 'r', encoding='utf-8') as f:
+                consensus_content = await f.read()
+
+        # 4. 后台启动执行
+        asyncio.create_task(
+            run_subtask_in_background(
+                task_id=task.task_id,
+                workspace_dir=workspace_dir,
+                settings=current_settings,
+                consensus_content=consensus_content
+            )
+        )
+        
+        return {"success": True, "task": task.model_dump()}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"success": False, "error": str(e)})
+
+@app.post("/v1/tasks/cancel/{task_id}")
+async def cancel_task_endpoint(task_id: str):
+    """取消任务"""
+    current_settings = await load_settings()
+    workspace_dir = current_settings.get("CLISettings", {}).get("cc_path")
+    if not workspace_dir:
+        raise HTTPException(status_code=400, detail="No workspace")
+        
+    task_center = await get_task_center(workspace_dir)
+    success = await task_center.cancel_task(task_id)
+    return {"success": success}
+
+@app.delete("/v1/tasks/{task_id}")
+async def delete_task_endpoint(task_id: str):
+    """删除任务"""
+    current_settings = await load_settings()
+    workspace_dir = current_settings.get("CLISettings", {}).get("cc_path")
+    if not workspace_dir:
+        raise HTTPException(status_code=400, detail="No workspace")
+        
+    task_center = await get_task_center(workspace_dir)
+    success = await task_center.delete_task(task_id)
+    return {"success": success}
 
 def sanitize_proxy_url(input_url: str) -> str:
     """
