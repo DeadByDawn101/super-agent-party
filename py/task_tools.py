@@ -48,7 +48,7 @@ create_subtask_tool = {
 任务目标：分析 data.csv 文件中的销售数据，生成月度报告
 
 背景信息：
-- 文件位于 /workspace/reports/data.csv
+- 文件位于 ./reports/data.csv
 - 包含列：date, product, quantity, revenue
 - 需要关注 2024年1月-3月的数据
 

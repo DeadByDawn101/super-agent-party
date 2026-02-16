@@ -1335,6 +1335,7 @@ def get_system_context() -> str:
 3. 执行 bash_tool_local 时，命令必须符合当前系统的语法规范
 4. 路径分隔符：Windows 使用反斜杠(\\)，Unix 使用正斜杠(/)
 5. 如果需要使用网络端口，请尽可能选择不常用的端口，避免冲突，例如：10000 以上的端口
+6. 请尽量使用相对路径，避免使用绝对路径，以免在跨平台时出现问题
 """
 
 
@@ -1528,10 +1529,13 @@ async def tools_change_messages(request: ChatRequest, settings: dict):
 
         # 权限模式提示（原有逻辑，但修复了变量名）
         if permissionMode != "plan":
-            permission_message = "你当前处于执行阶段，你可以自由地使用所有工具，但请注意不要滥用权限！如果有更安全的工具，请不要直接使用bash命令！"
+            permission_message = "你当前处于执行模式，你可以自由地使用所有工具，但请注意不要滥用权限！如果有更安全的工具，请不要直接使用bash命令！"
+            content_append(request.messages, 'system', permission_message)
+        elif permissionMode == "cowork":
+            permission_message = "你当前处于协作阶段，你可以将复杂任务拆解成多个简单子任务，交给子智能体执行，这些子智能体将在后台异步执行这些任务，当你创建任务后，请不要查询这些任务的结果，因为它们可能还在执行中，请当用户询问时再查询任务进度即可!"
             content_append(request.messages, 'system', permission_message)
         else:
-            permission_message = "你当前处于计划阶段，请尽可能只使用只读工具了解当前项目，使用自然语言描述你的需求和计划，并等待用户确认后再执行！"
+            permission_message = "你当前处于计划模式，请尽可能只使用只读工具了解当前项目，使用自然语言描述你的需求和计划，并等待用户确认后再执行！"
             content_append(request.messages, 'system', permission_message)
 
     if settings["HASettings"]["enabled"]:

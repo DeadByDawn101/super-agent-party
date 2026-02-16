@@ -1566,87 +1566,177 @@ TOOLS_REGISTRY = {
     # --- 只读 ---
     "list_files": {
         "type": "function", "function": {
-            "name": "list_files_tool", "description": "List files in docker workspace.",
-            "parameters": {"type": "object", "properties": {"path": {"type": "string"}, "show_all": {"type": "boolean","default": True}}, "required": ["path"]}
+            "name": "list_files_tool", 
+            "description": "List files in docker workspace.",
+            "parameters": {
+                "type": "object", 
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Relative path to list files in (from workspace root)."
+                    }, 
+                    "show_all": {"type": "boolean", "default": True}
+                }, 
+                "required": ["path"]
+            }
         }
     },
     "read_file": {
         "type": "function", "function": {
-            "name": "read_file_tool", "description": "Read file content.",
-            "parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}
+            "name": "read_file_tool", 
+            "description": "Read file content.",
+            "parameters": {
+                "type": "object", 
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Relative path to file (from workspace root)."
+                    }
+                }, 
+                "required": ["path"]
+            }
         }
     },
     "search_files": {
         "type": "function", "function": {
-            "name": "search_files_tool", "description": "Grep search.",
-            "parameters": {"type": "object", "properties": {"pattern": {"type": "string"}, "path": {"type": "string"}}, "required": ["pattern"]}
+            "name": "search_files_tool", 
+            "description": "Grep search.",
+            "parameters": {
+                "type": "object", 
+                "properties": {
+                    "pattern": {"type": "string"}, 
+                    "path": {
+                        "type": "string",
+                        "description": "Relative path to directory to search in (from workspace root)."
+                    }
+                }, 
+                "required": ["pattern"]
+            }
         }
     },
     "glob_files": {
         "type": "function", "function": {
-            "name": "glob_files_tool", "description": "Recursive glob.",
-            "parameters": {"type": "object", "properties": {"pattern": {"type": "string"}, "exclude": {"type": "string"}}, "required": ["pattern"]}
+            "name": "glob_files_tool", 
+            "description": "Recursive glob.",
+            "parameters": {
+                "type": "object", 
+                "properties": {
+                    "pattern": {
+                        "type": "string",
+                        "description": "Glob pattern (relative to workspace root)."
+                    }, 
+                    "exclude": {"type": "string"}
+                }, 
+                "required": ["pattern"]
+            }
         }
     },
     "read_skill": {
         "type": "function", "function": {
             "name": "read_skill_tool", 
             "description": "Read full documentation and file tree for a project-specific skill from .agent/skills/.",
-            "parameters": {"type": "object", "properties": {"skill_id": {"type": "string"}}, "required": ["skill_id"]}
+            "parameters": {
+                "type": "object", 
+                "properties": {
+                    "skill_id": {"type": "string"}
+                }, 
+                "required": ["skill_id"]
+            }
         }
     },
     # --- 编辑 ---
     "edit_file": {
         "type": "function", "function": {
-            "name": "edit_file_tool", "description": "Overwrite file.",
-            "parameters": {"type": "object", "properties": {"path": {"type": "string"}, "content": {"type": "string"}}, "required": ["path", "content"]}
+            "name": "edit_file_tool", 
+            "description": "Overwrite file.",
+            "parameters": {
+                "type": "object", 
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Relative path to file (from workspace root)."
+                    }, 
+                    "content": {"type": "string"}
+                }, 
+                "required": ["path", "content"]
+            }
         }
     },
     "edit_file_patch": {
         "type": "function", "function": {
-            "name": "edit_file_patch_tool", "description": "Precise replacement.",
-            "parameters": {"type": "object", "properties": {"path": {"type": "string"}, "old_string": {"type": "string"}, "new_string": {"type": "string"}}, "required": ["path", "old_string"]}
+            "name": "edit_file_patch_tool", 
+            "description": "Precise replacement.",
+            "parameters": {
+                "type": "object", 
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Relative path to file (from workspace root)."
+                    }, 
+                    "old_string": {"type": "string"}, 
+                    "new_string": {"type": "string"}
+                }, 
+                "required": ["path", "old_string"]
+            }
         }
     },
     # --- 任务 ---
     "todo_write": {
         "type": "function", "function": {
-            "name": "todo_write_tool", "description": "Manage tasks.",
-            "parameters": {"type": "object", "properties": {"action": {"type": "string", "enum": ["create","list","update","delete","toggle"]}, "content": {"type": "string"}, "id": {"type": "string"}}, "required": ["action"]}
+            "name": "todo_write_tool", 
+            "description": "Manage tasks.",
+            "parameters": {
+                "type": "object", 
+                "properties": {
+                    "action": {"type": "string", "enum": ["create","list","update","delete","toggle"]}, 
+                    "content": {"type": "string"}, 
+                    "id": {"type": "string"}
+                }, 
+                "required": ["action"]
+            }
         }
     },
-    # --- 基础设施 (核心更新) ---
+    # --- 基础设施 ---
     "bash": {
         "type": "function", "function": {
-            "name": "docker_sandbox_async", "description": "Run bash in Docker.",
+            "name": "docker_sandbox_async", 
+            "description": "Run bash in Docker.",
             "parameters": {
-                "type": "object", "properties": {
+                "type": "object", 
+                "properties": {
                     "command": {"type": "string"}, 
                     "background": {"type": "boolean", "description": "Run non-blocking (server/watcher). Returns PID."}
-                }, "required": ["command"]
+                }, 
+                "required": ["command"]
             }
         }
     },
     "manage_processes": {
         "type": "function", "function": {
-            "name": "manage_processes_tool", "description": "Check logs or kill background processes (Docker & Local).",
+            "name": "manage_processes_tool", 
+            "description": "Check logs or kill background processes (Docker & Local).",
             "parameters": {
-                "type": "object", "properties": {
+                "type": "object", 
+                "properties": {
                     "action": {"type": "string", "enum": ["list", "logs", "kill"]},
                     "pid": {"type": "string"}
-                }, "required": ["action"]
+                }, 
+                "required": ["action"]
             }
         }
     },
     "manage_ports": {
         "type": "function", "function": {
-            "name": "docker_manage_ports_tool", "description": "Forward Docker ports to localhost.",
+            "name": "docker_manage_ports_tool", 
+            "description": "Forward Docker ports to localhost.",
             "parameters": {
-                "type": "object", "properties": {
+                "type": "object", 
+                "properties": {
                     "action": {"type": "string", "enum": ["forward", "stop", "list"]},
                     "container_port": {"type": "integer"},
                     "host_port": {"type": "integer"}
-                }, "required": ["action"]
+                }, 
+                "required": ["action"]
             }
         }
     }
@@ -1656,85 +1746,172 @@ LOCAL_TOOLS_REGISTRY = {
     # --- 只读 ---
     "list_files_local": {
         "type": "function", "function": {
-            "name": "list_files_tool_local", "description": "List local files.",
-            "parameters": {"type": "object", "properties": {"path": {"type": "string"}, "show_all": {"type": "boolean","default": True}}, "required": ["path"]}
+            "name": "list_files_tool_local", 
+            "description": "List local files.",
+            "parameters": {
+                "type": "object", 
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Relative path to list files in (from current working directory)."
+                    }, 
+                    "show_all": {"type": "boolean","default": True}
+                }, 
+                "required": ["path"]
+            }
         }
     },
     "read_file_local": {
         "type": "function", "function": {
-            "name": "read_file_tool_local", "description": "Read local file.",
-            "parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}
+            "name": "read_file_tool_local", 
+            "description": "Read local file.",
+            "parameters": {
+                "type": "object", 
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Relative path to file (from current working directory)."
+                    }
+                }, 
+                "required": ["path"]
+            }
         }
     },
     "search_files_local": {
          "type": "function", "function": {
-            "name": "search_files_tool_local", "description": "Search local files.",
-            "parameters": {"type": "object", "properties": {"pattern": {"type": "string"}}, "required": ["pattern"]}
+            "name": "search_files_tool_local", 
+            "description": "Search local files.",
+            "parameters": {
+                "type": "object", 
+                "properties": {
+                    "pattern": {"type": "string"}
+                    # 注意：根据之前的代码实现，search_files_local 似乎没有 path 参数，而是直接在 CWD 搜索。
+                    # 如果需要支持指定路径，需要在实现代码中确认。
+                }, 
+                "required": ["pattern"]
+            }
         }
     },
     "glob_files_local": {
          "type": "function", "function": {
-            "name": "glob_files_tool_local", "description": "Glob local files.",
-            "parameters": {"type": "object", "properties": {"pattern": {"type": "string"}}, "required": ["pattern"]}
+            "name": "glob_files_tool_local", 
+            "description": "Glob local files.",
+            "parameters": {
+                "type": "object", 
+                "properties": {
+                    "pattern": {
+                        "type": "string",
+                        "description": "Glob pattern (relative to current working directory)."
+                    }
+                }, 
+                "required": ["pattern"]
+            }
         }
     },
     "read_skill_local": {
         "type": "function", "function": {
             "name": "read_skill_tool_local", 
             "description": "Read full documentation and file tree for a project-specific skill from .agent/skills/ (Local).",
-            "parameters": {"type": "object", "properties": {"skill_id": {"type": "string"}}, "required": ["skill_id"]}
+            "parameters": {
+                "type": "object", 
+                "properties": {
+                    "skill_id": {"type": "string"}
+                }, 
+                "required": ["skill_id"]
+            }
         }
     },
     # --- 编辑 ---
     "edit_file_local": {
         "type": "function", "function": {
-            "name": "edit_file_tool_local", "description": "Write local file.",
-            "parameters": {"type": "object", "properties": {"path": {"type": "string"}, "content": {"type": "string"}}, "required": ["path"]}
+            "name": "edit_file_tool_local", 
+            "description": "Write local file.",
+            "parameters": {
+                "type": "object", 
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Relative path to file (from current working directory)."
+                    }, 
+                    "content": {"type": "string"}
+                }, 
+                "required": ["path"]
+            }
         }
     },
     "edit_file_patch_local": {
         "type": "function", "function": {
-            "name": "edit_file_patch_tool_local", "description": "Patch local file.",
-            "parameters": {"type": "object", "properties": {"path": {"type": "string"}, "old_string": {"type": "string"}, "new_string": {"type": "string"}}, "required": ["path", "old_string"]}
+            "name": "edit_file_patch_tool_local", 
+            "description": "Patch local file.",
+            "parameters": {
+                "type": "object", 
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Relative path to file (from current working directory)."
+                    }, 
+                    "old_string": {"type": "string"}, 
+                    "new_string": {"type": "string"}
+                }, 
+                "required": ["path", "old_string"]
+            }
         }
     },
     "todo_write_local": {
         "type": "function", "function": {
-            "name": "todo_write_tool_local", "description": "Manage local tasks.",
-            "parameters": {"type": "object", "properties": {"action": {"type": "string", "enum": ["create","list","update","delete","toggle"]}, "content": {"type": "string"}, "id": {"type": "string"}}, "required": ["action"]}
+            "name": "todo_write_tool_local", 
+            "description": "Manage local tasks.",
+            "parameters": {
+                "type": "object", 
+                "properties": {
+                    "action": {"type": "string", "enum": ["create","list","update","delete","toggle"]}, 
+                    "content": {"type": "string"}, 
+                    "id": {"type": "string"}
+                }, 
+                "required": ["action"]
+            }
         }
     },
-    # --- 基础设施 (核心更新) ---
+    # --- 基础设施 ---
     "bash_local": {
         "type": "function", "function": {
-            "name": "bash_tool_local", "description": "Run local command.",
+            "name": "bash_tool_local", 
+            "description": "Run local command.",
             "parameters": {
-                "type": "object", "properties": {
+                "type": "object", 
+                "properties": {
                     "command": {"type": "string"},
                     "background": {"type": "boolean", "description": "Run in background."}
-                }, "required": ["command"]
+                }, 
+                "required": ["command"]
             }
         }
     },
     "manage_processes_local": {
         "type": "function", "function": {
-            "name": "manage_processes_tool", "description": "Manage local background processes.",
+            "name": "manage_processes_tool", 
+            "description": "Manage local background processes.",
             "parameters": {
-                "type": "object", "properties": {
+                "type": "object", 
+                "properties": {
                     "action": {"type": "string", "enum": ["list", "logs", "kill"]},
                     "pid": {"type": "string"}
-                }, "required": ["action"]
+                }, 
+                "required": ["action"]
             }
         }
     },
     "local_net_tool": {
         "type": "function", "function": {
-            "name": "local_net_tool", "description": "Check local ports.",
+            "name": "local_net_tool", 
+            "description": "Check local ports.",
             "parameters": {
-                "type": "object", "properties": {
+                "type": "object", 
+                "properties": {
                     "action": {"type": "string", "enum": ["check", "scan"]},
                     "port": {"type": "integer"}
-                }, "required": ["action"]
+                }, 
+                "required": ["action"]
             }
         }
     }
