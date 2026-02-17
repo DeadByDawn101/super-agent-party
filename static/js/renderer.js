@@ -978,6 +978,14 @@ const handleRemoteInstall = (data) => {
     window.removeEventListener('resize', this.handleResize);
   },
   watch: {
+    sidePanelOpen(val) {
+        if (!val && this.taskRefreshTimer) {
+            clearInterval(this.taskRefreshTimer);
+        } else if (val && this.activeSideView === 'tasks') {
+            this.fetchTasks();
+            this.taskRefreshTimer = setInterval(this.fetchTasks, 3000);
+        }
+    },
     'tempBehavior.trigger.cycle.cycleValue'(newVal) {
       if (newVal === '00:00:00') {
         this.tempBehavior.trigger.cycle.cycleValue = '00:00:01';
@@ -1133,28 +1141,10 @@ const handleRemoteInstall = (data) => {
     },
   },
   computed: {
-    // 动态获取当前正在编辑的配置对象
-    currentBrainSettings() {
-      if (!this.currentEditingKey) return null;
-      // 根据 key 拼接字符串来访问 data 中的数据
-      // 例如：'prefrontalCortex' -> this.prefrontalCortexSettings
-      return this[`${this.currentEditingKey}Settings`];
-    },
-
-    // 动态获取模态框标题
-    currentBrainTitle() {
-      if (!this.currentEditingKey) return '';
-      // 这里复用你已有的翻译 key
-      return this.t(this.currentEditingKey); // 结果如: "前额叶 设置"
-    },
-    isAllBrainsActive() {
-      // 注意：使用 this. 且不需要 .value
-      return (
-        this.prefrontalCortexSettings.enabled &&
-        this.NeocortexSettings.enabled &&
-        this.LimbicSystemSettings.enabled &&
-        this.ReptilianBrainSettings.enabled
-      );
+    hasWorkspacePath() {
+        return this.CLISettings && 
+               this.CLISettings.cc_path && 
+               this.CLISettings.cc_path.trim() !== '';
     },
     dynamicUserAgent() {
       // 1. 定义一个较新的 Chrome 版本号 (定期更新这个版本号可以保持最佳兼容性)

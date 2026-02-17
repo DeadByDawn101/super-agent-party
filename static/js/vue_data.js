@@ -2010,5 +2010,18 @@ main();`,
     showBehaviorDialog: false,     // 控制弹窗显示
     currentBehaviorIndex: -1,      // 当前编辑的索引，-1 表示新增
     tempBehavior: null,            // 临时编辑对象，避免直接修改原数据
-    minLimit: { h: 0, m: 1, s: 0 } 
+    minLimit: { h: 0, m: 1, s: 0 },
+    activeSideView: 'list', // 'list' | 'tasks' | 'extension'
+    taskList: [],
+    taskRefreshTimer: null,
+    showCreateTaskDialog: false,
+    isCreatingTask: false,
+    newTaskForm: {
+        title: '',
+        description: '',
+        agent_type: 'default'
+    },
+    showTaskResultDialog: false,
+    selectedTaskResult: '',
+    selectedTaskTitle: '',
 };

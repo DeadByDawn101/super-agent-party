@@ -826,6 +826,7 @@ async def dispatch_tool(tool_name: str, tool_params: dict, settings: dict) -> st
         jina_crawler_async,
         Crawl4Ai_search_async, 
         firecrawl_search_async,
+        simple_fetch_async,
     )
     from py.know_base import query_knowledge_base
     from py.agent_tool import agent_tool_call
@@ -898,6 +899,12 @@ async def dispatch_tool(tool_name: str, tool_params: dict, settings: dict) -> st
     )
     from py.random_topic import get_random_topics,get_categories
 
+    from py.task_tools import (
+        create_subtask,
+        query_task_progress,
+        cancel_subtask
+    )
+
     # ==================== 2. 定义工具映射表 ====================
     _TOOL_HOOKS = {
         "DDGsearch_async": DDGsearch_async,
@@ -907,6 +914,7 @@ async def dispatch_tool(tool_name: str, tool_params: dict, settings: dict) -> st
         "jina_crawler_async": jina_crawler_async,
         "Crawl4Ai_search_async": Crawl4Ai_search_async,
         "firecrawl_search_async": firecrawl_search_async,
+        "simple_fetch_async":simple_fetch_async,
         "agent_tool_call": agent_tool_call,
         "a2a_tool_call": a2a_tool_call,
         "custom_llm_tool": custom_llm_tool,
@@ -977,6 +985,11 @@ async def dispatch_tool(tool_name: str, tool_params: dict, settings: dict) -> st
         "todo_write_tool_local": todo_write_tool_local,         # 本地任务管理
         "local_net_tool": local_net_tool,                       # 本地网络工具
         "read_skill_tool_local": read_skill_tool_local,         # 本地技能读取
+
+        # 任务中心工具（新增）
+        "create_subtask": create_subtask,
+        "query_task_progress": query_task_progress,
+        "cancel_subtask": cancel_subtask,
     }
     
     # ==================== 3. 权限拦截逻辑 (Human-in-the-loop) ====================
@@ -1015,7 +1028,7 @@ async def dispatch_tool(tool_name: str, tool_params: dict, settings: dict) -> st
         is_allowed = False
 
         # --- 规则 A: 全局 YOLO 模式 (Bypass Permissions) ---
-        if permission_mode == "yolo":
+        if permission_mode == "yolo" or permission_mode == "cowork":
             is_allowed = True
             
         # --- 规则 B: 自动批准模式 (Accept Edits) ---
@@ -1111,6 +1124,47 @@ async def dispatch_tool(tool_name: str, tool_params: dict, settings: dict) -> st
             else:
                 return str(result)
                 
+    # ==================== 5. 任务中心工具特殊处理 ====================
+    if tool_name in ["create_subtask", "query_task_progress", "cancel_subtask"]:
+        cli_settings = settings.get("CLISettings", {})
+        cwd = cli_settings.get("cc_path")
+        
+        if tool_name == "create_subtask":
+            # 读取共识文件（如果存在）
+            from pathlib import Path
+            import aiofiles
+            
+            consensus_content = None
+            consensus_file = Path(cwd) / ".agent" / "consensus.md"
+            if consensus_file.exists():
+                async with aiofiles.open(consensus_file, 'r', encoding='utf-8') as f:
+                    consensus_content = await f.read()
+            
+            result = await create_subtask(
+                title=tool_params.get("title"),
+                description=tool_params.get("description"),
+                agent_type=tool_params.get("agent_type", "default"),
+                workspace_dir=cwd,
+                settings=settings,  # 只需要传 settings
+                consensus_content=consensus_content
+            )
+            return result
+        
+        elif tool_name == "query_task_progress":
+            result = await query_task_progress(
+                workspace_dir=cwd,
+                parent_task_id=tool_params.get("parent_task_id"),
+                status=tool_params.get("status")
+            )
+            return result
+        
+        elif tool_name == "cancel_subtask":
+            result = await cancel_subtask(
+                workspace_dir=cwd,
+                task_id=tool_params.get("task_id")
+            )
+            return result
+
     if tool_name not in _TOOL_HOOKS:
         for server_name, mcp_client in mcp_client_list.items():
             if tool_name in mcp_client._conn.tools:
@@ -1134,6 +1188,7 @@ async def dispatch_tool(tool_name: str, tool_params: dict, settings: dict) -> st
     except Exception as e:
         logger.error(f"Error calling tool {tool_name}: {e}")
         return f"Error calling tool {tool_name}: {e}"
+
 class ChatRequest(BaseModel):
     messages: List[Dict]
     model: str = None
@@ -1149,6 +1204,9 @@ class ChatRequest(BaseModel):
     asyncToolsID: List[str] = None
     reasoning_effort: str = None
     is_app_bot: bool = False
+    is_sub_agent: bool = False
+    enable_tools : List[str] = None
+    disable_tools: List[str] = None
 
 async def message_without_images(messages: List[Dict]) -> List[Dict]:
     if messages:
@@ -1277,6 +1335,7 @@ def get_system_context() -> str:
 3. 执行 bash_tool_local 时，命令必须符合当前系统的语法规范
 4. 路径分隔符：Windows 使用反斜杠(\\)，Unix 使用正斜杠(/)
 5. 如果需要使用网络端口，请尽可能选择不常用的端口，避免冲突，例如：10000 以上的端口
+6. 请尽量使用相对路径，避免使用绝对路径，以免在跨平台时出现问题
 """
 
 
@@ -1470,10 +1529,13 @@ async def tools_change_messages(request: ChatRequest, settings: dict):
 
         # 权限模式提示（原有逻辑，但修复了变量名）
         if permissionMode != "plan":
-            permission_message = "你当前处于执行阶段，你可以自由地使用所有工具，但请注意不要滥用权限！如果有更安全的工具，请不要直接使用bash命令！"
+            permission_message = "你当前处于执行模式，你可以自由地使用所有工具，但请注意不要滥用权限！如果有更安全的工具，请不要直接使用bash命令！"
+            content_append(request.messages, 'system', permission_message)
+        elif permissionMode == "cowork":
+            permission_message = "你当前处于协作阶段，你可以将复杂任务拆解成多个简单子任务，交给子智能体执行，这些子智能体将在后台异步执行这些任务，当你创建任务后，请不要查询这些任务的结果，因为它们可能还在执行中，请当用户询问时再查询任务进度即可!当你需要调用工具时，尽可能的使用子任务来执行，这样可以避免直接调用工具阻塞对话！"
             content_append(request.messages, 'system', permission_message)
         else:
-            permission_message = "你当前处于计划阶段，请尽可能只使用只读工具了解当前项目，使用自然语言描述你的需求和计划，并等待用户确认后再执行！"
+            permission_message = "你当前处于计划模式，请尽可能只使用只读工具了解当前项目，使用自然语言描述你的需求和计划，并等待用户确认后再执行！"
             content_append(request.messages, 'system', permission_message)
 
     if settings["HASettings"]["enabled"]:
@@ -1970,6 +2032,7 @@ async def generate_stream_response(client,reasoner_client, request: ChatRequest,
         serper_tool,
         bochaai_tool,
         jina_crawler_tool, 
+        simple_fetch_tool,
         Crawl4Ai_tool,
         firecrawl_tool,
     )
@@ -1992,6 +2055,13 @@ async def generate_stream_response(client,reasoner_client, request: ChatRequest,
     from py.cli_tool import claude_code_tool,qwen_code_tool,get_tools_for_mode,get_local_tools_for_mode
     from py.cdp_tool import all_cdp_tools
     from py.random_topic import random_topics_tools
+
+    from py.task_tools import (
+        create_subtask_tool,
+        query_tasks_tool,
+        cancel_subtask_tool
+    )
+
     m0 = None
     memoryId = None
     if settings["memorySettings"]["is_memory"] and settings["memorySettings"]["selectedMemory"] and settings["memorySettings"]["selectedMemory"] != "":
@@ -2168,6 +2238,103 @@ async def generate_stream_response(client,reasoner_client, request: ChatRequest,
                         },
                     }
                     tools.append(comfyui_tool)
+        # ==================== 获取权限模式 ====================
+        cli_settings = settings.get("CLISettings", {})
+        engine = cli_settings.get("engine", "")
+        
+        # 根据环境类型获取权限模式
+        if engine == "local":
+            env_settings = settings.get("localEnvSettings", {})
+        elif engine == "ds":
+            env_settings = settings.get("dsSettings", {})
+        elif engine == "cc":
+            env_settings = settings.get("ccSettings", {})
+        elif engine == "qc":
+            env_settings = settings.get("qcSettings", {})
+        else:
+            env_settings = {}
+        
+        permission_mode = env_settings.get("permissionMode", "default")
+        if permission_mode == "cowork":
+            tools.append(create_subtask_tool)
+            tools.append(query_tasks_tool)
+            tools.append(cancel_subtask_tool)
+
+
+        # 如果是子智能体调用，或者指定了工具过滤规则
+        if request.is_sub_agent or request.enable_tools or request.disable_tools:
+            original_tool_count = len(tools)
+            
+            # 1. Enable Tools 过滤（白名单模式）
+            if request.enable_tools and len(request.enable_tools) > 0:
+                # 只保留白名单中的工具
+                filtered_tools = []
+                enable_set = set(request.enable_tools)
+                
+                for tool in tools:
+                    tool_name = tool.get("function", {}).get("name", "")
+                    if tool_name in enable_set:
+                        filtered_tools.append(tool)
+                
+                tools = filtered_tools
+                print(f"[Tool Filter] Enable mode: {original_tool_count} -> {len(tools)} tools (enabled: {request.enable_tools})")
+            
+            # 2. Disable Tools 过滤（黑名单模式）
+            elif request.disable_tools and len(request.disable_tools) > 0:
+                # 移除黑名单中的工具
+                disable_set = set(request.disable_tools)
+                filtered_tools = []
+                
+                for tool in tools:
+                    tool_name = tool.get("function", {}).get("name", "")
+                    if tool_name not in disable_set:
+                        filtered_tools.append(tool)
+                
+                tools = filtered_tools
+                print(f"[Tool Filter] Disable mode: {original_tool_count} -> {len(tools)} tools (disabled: {request.disable_tools})")
+            
+            # 3. 子智能体默认策略（如果没有指定 enable/disable）
+            elif request.is_sub_agent:
+                # 子智能体默认只保留安全的工具，移除高风险操作
+                SUBAGENT_BLOCKED_TOOLS = [
+                    # 阻止子智能体执行系统命令
+                    "docker_sandbox_async",
+                    "bash_tool_local",
+                    "claude_code_async",
+                    "qwen_code_async",
+                    
+                    # 阻止子智能体管理进程/端口
+                    "manage_processes_tool",
+                    "docker_manage_ports_tool",
+                    "local_net_tool",
+                    
+                    # 阻止子智能体创建子任务（防止递归）
+                    "create_subtask",
+                    
+                    # 阻止高风险的浏览器操作
+                    "new_page",
+                    "close_page",
+                    "evaluate_script",
+                    
+                    # 阻止子智能体使用 Agent 调用（防止复杂的嵌套）
+                    "agent_tool_call",
+                    "a2a_tool_call",
+                ]
+                
+                filtered_tools = []
+                blocked_count = 0
+                
+                for tool in tools:
+                    tool_name = tool.get("function", {}).get("name", "")
+                    if tool_name not in SUBAGENT_BLOCKED_TOOLS:
+                        filtered_tools.append(tool)
+                    else:
+                        blocked_count += 1
+                
+                tools = filtered_tools
+                print(f"[SubAgent Safety] Blocked {blocked_count} dangerous tools: {original_tool_count} -> {len(tools)} tools")
+    
+
         print(tools)
         source_prompt = ""
         if request.fileLinks:
@@ -2542,6 +2709,8 @@ async def generate_stream_response(client,reasoner_client, request: ChatRequest,
                             tools.append(Crawl4Ai_tool)
                         elif settings['webSearch']['crawler'] == 'firecrawl':
                             tools.append(firecrawl_tool)
+                        elif settings['webSearch']['crawler'] == 'simpleRequest':
+                            tools.append(simple_fetch_tool)
                 if kb_list:
                     tools.append(kb_tool)
                 if settings['tools']['deepsearch']['enabled'] or enable_deep_research: 
@@ -3616,6 +3785,7 @@ async def generate_complete_response(client,reasoner_client, request: ChatReques
         serper_tool,
         bochaai_tool,
         jina_crawler_tool, 
+        simple_fetch_tool,
         Crawl4Ai_tool,
         firecrawl_tool,
     )
@@ -4019,6 +4189,8 @@ async def generate_complete_response(client,reasoner_client, request: ChatReques
                     tools.append(Crawl4Ai_tool)
                 elif settings['webSearch']['crawler'] == 'firecrawl':
                     tools.append(firecrawl_tool)
+                elif settings['webSearch']['crawler'] == 'simpleRequest':
+                    tools.append(simple_fetch_tool)
         if kb_list:
             tools.append(kb_tool)
         if settings['tools']['deepsearch']['enabled'] or enable_deep_research: 
@@ -4522,6 +4694,7 @@ async def execute_tool_manually(request: Request):
         jina_crawler_async,
         Crawl4Ai_search_async, 
         firecrawl_search_async,
+        simple_fetch_async,
     )
     from py.know_base import query_knowledge_base
     from py.agent_tool import agent_tool_call
@@ -4594,6 +4767,12 @@ async def execute_tool_manually(request: Request):
     )
     from py.random_topic import get_random_topics,get_categories
 
+    from py.task_tools import (
+        create_subtask,
+        query_task_progress,
+        cancel_subtask
+    )
+
     # ==================== 2. 定义工具映射表 ====================
     _TOOL_HOOKS = {
         "DDGsearch_async": DDGsearch_async,
@@ -4603,6 +4782,7 @@ async def execute_tool_manually(request: Request):
         "jina_crawler_async": jina_crawler_async,
         "Crawl4Ai_search_async": Crawl4Ai_search_async,
         "firecrawl_search_async": firecrawl_search_async,
+        "simple_fetch_async":simple_fetch_async,
         "agent_tool_call": agent_tool_call,
         "a2a_tool_call": a2a_tool_call,
         "custom_llm_tool": custom_llm_tool,
@@ -4673,6 +4853,12 @@ async def execute_tool_manually(request: Request):
         "todo_write_tool_local": todo_write_tool_local,         # 本地任务管理
         "local_net_tool": local_net_tool,                       # 本地网络工具
         "read_skill_tool_local": read_skill_tool_local,         # 本地技能读取
+
+        # 任务中心工具（新增）
+        "create_subtask": create_subtask,
+        "query_task_progress": query_task_progress,
+        "cancel_subtask": cancel_subtask,
+
     }
     
     if tool_name not in _TOOL_HOOKS:
@@ -4681,6 +4867,28 @@ async def execute_tool_manually(request: Request):
     tool_func = _TOOL_HOOKS[tool_name]
     
     try:
+        if tool_name in ["create_subtask", "query_task_progress", "cancel_subtask"]:
+            cwd = settings.get("CLISettings", {}).get("cc_path")
+            
+            if tool_name == "create_subtask":
+                from pathlib import Path
+                import aiofiles
+                
+                consensus_content = None
+                consensus_file = Path(cwd) / ".agent" / "consensus.md"
+                if consensus_file.exists():
+                    async with aiofiles.open(consensus_file, 'r', encoding='utf-8') as f:
+                        consensus_content = await f.read()
+                
+                tool_params.update({
+                    "workspace_dir": cwd,
+                    "settings": settings,
+                    "consensus_content": consensus_content
+                })
+            
+            elif tool_name in ["query_task_progress", "cancel_subtask"]:
+                tool_params["workspace_dir"] = cwd
+
         # 2. 执行工具
         result = await tool_func(**tool_params)
         
@@ -5025,6 +5233,100 @@ async def simple_chat_endpoint(request: ChatRequest):
         media_type="text/plain",      # 也可以保持 "text/event-stream"
         headers={"Cache-Control": "no-cache"}
     )
+
+
+from py.task_center import get_task_center
+from py.sub_agent import run_subtask_in_background
+
+# --- 新增任务中心 API ---
+
+class TaskCreateRequest(BaseModel):
+    title: str
+    description: str
+    agent_type: str = "default"
+
+@app.get("/v1/tasks/list")
+async def list_tasks_endpoint():
+    """获取当前工作区的所有任务"""
+    current_settings = await load_settings()
+    workspace_dir = current_settings.get("CLISettings", {}).get("cc_path")
+    
+    if not workspace_dir:
+        return {"tasks": [], "error": "No workspace configured"}
+        
+    try:
+        task_center = await get_task_center(workspace_dir)
+        tasks = await task_center.list_tasks()
+        return {"tasks": [t.model_dump() for t in tasks]}
+    except Exception as e:
+        return {"tasks": [], "error": str(e)}
+
+@app.post("/v1/tasks/create")
+async def create_task_endpoint(req: TaskCreateRequest):
+    """手动创建任务"""
+    current_settings = await load_settings()
+    workspace_dir = current_settings.get("CLISettings", {}).get("cc_path")
+    
+    if not workspace_dir:
+        raise HTTPException(status_code=400, detail="工作区路径未配置，请先在工具箱-CLI中设置")
+
+    try:
+        # 1. 获取任务中心
+        task_center = await get_task_center(workspace_dir)
+        
+        # 2. 创建任务记录
+        task = await task_center.create_task(
+            title=req.title,
+            description=req.description,
+            agent_type=req.agent_type,
+            parent_task_id="MANUAL_USER" # 标记为用户手动创建
+        )
+        
+        # 3. 读取共识文件（可选）
+        consensus_content = None
+        consensus_file = Path(workspace_dir) / ".agent" / "consensus.md"
+        if consensus_file.exists():
+            import aiofiles
+            async with aiofiles.open(consensus_file, 'r', encoding='utf-8') as f:
+                consensus_content = await f.read()
+
+        # 4. 后台启动执行
+        asyncio.create_task(
+            run_subtask_in_background(
+                task_id=task.task_id,
+                workspace_dir=workspace_dir,
+                settings=current_settings,
+                consensus_content=consensus_content
+            )
+        )
+        
+        return {"success": True, "task": task.model_dump()}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"success": False, "error": str(e)})
+
+@app.post("/v1/tasks/cancel/{task_id}")
+async def cancel_task_endpoint(task_id: str):
+    """取消任务"""
+    current_settings = await load_settings()
+    workspace_dir = current_settings.get("CLISettings", {}).get("cc_path")
+    if not workspace_dir:
+        raise HTTPException(status_code=400, detail="No workspace")
+        
+    task_center = await get_task_center(workspace_dir)
+    success = await task_center.cancel_task(task_id)
+    return {"success": success}
+
+@app.delete("/v1/tasks/{task_id}")
+async def delete_task_endpoint(task_id: str):
+    """删除任务"""
+    current_settings = await load_settings()
+    workspace_dir = current_settings.get("CLISettings", {}).get("cc_path")
+    if not workspace_dir:
+        raise HTTPException(status_code=400, detail="No workspace")
+        
+    task_center = await get_task_center(workspace_dir)
+    success = await task_center.delete_task(task_id)
+    return {"success": success}
 
 def sanitize_proxy_url(input_url: str) -> str:
     """

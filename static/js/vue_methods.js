@@ -11602,6 +11602,8 @@ clearSegments() {
     this.showExtensionsDialog = false;
     this.expandChatArea();
     this.collapseSidePanel();
+    this.activeSideView = 'list'; // 确保回到列表
+    if (this.taskRefreshTimer) clearInterval(this.taskRefreshTimer); // 清除定时器
   },
   // 打开扩展选择对话框
   openExtensionsDialog() {
@@ -14850,4 +14852,125 @@ async handleRefreshSkills() {
       }
     },
 
+    // 打开任务中心
+    openTaskCenter() {
+        this.activeSideView = 'tasks';
+        this.sidePanelURL = ''; // 确保 iframe 关闭
+        this.currentExtension = null;
+        this.showExtensionsDialog = false; // 关闭对话框
+        this.expandSidePanel();
+        this.fetchTasks();
+        // 开启轮询
+        if (this.taskRefreshTimer) clearInterval(this.taskRefreshTimer);
+        this.taskRefreshTimer = setInterval(this.fetchTasks, 3000);
+    },
+
+    // 关闭任务中心（返回列表）
+    closeTaskCenter() {
+        this.activeSideView = 'list';
+        if (this.taskRefreshTimer) clearInterval(this.taskRefreshTimer);
+    },
+
+    // 获取任务列表
+    async fetchTasks() {
+        if (!this.hasWorkspacePath || !this.sidePanelOpen || this.activeSideView !== 'tasks') return;
+        
+        try {
+            const res = await fetch(`/v1/tasks/list`);
+            const data = await res.json();
+            if (data.tasks) {
+                this.taskList = data.tasks;
+            }
+        } catch (e) {
+            console.error("Failed to fetch tasks", e);
+        }
+    },
+
+    // 创建任务
+    async submitCreateTask() {
+        if (!this.newTaskForm.title || !this.newTaskForm.description) {
+            showNotification(this.t('fillRequired'), 'error');
+            return;
+        }
+
+        this.isCreatingTask = true;
+        try {
+            const res = await fetch(`/v1/tasks/create`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(this.newTaskForm)
+            });
+            const data = await res.json();
+            
+            if (data.success) {
+                showNotification(this.t('success'))
+                this.showCreateTaskDialog = false;
+                this.newTaskForm = { title: '', description: '', agent_type: 'default' };
+                this.fetchTasks();
+            } else {
+                showNotification(data.error, 'error');
+            }
+        } catch (e) {
+            showNotification(this.t('networkError') || '网络错误', 'error')
+        } finally {
+            this.isCreatingTask = false;
+        }
+    },
+
+    // 取消任务
+    async handleCancelTask(taskId) {
+        try {
+            await fetch(`/v1/tasks/cancel/${taskId}`, { method: 'POST' });
+            showNotification(this.t('cancelSuccess') || '取消任务成功');
+            this.fetchTasks();
+        } catch (e) { console.error(e); }
+    },
+
+    // 删除任务
+    async handleDeleteTask(taskId) {
+        try {
+            const res = await fetch(`/v1/tasks/${taskId}`, { 
+                method: 'DELETE' 
+            });
+            
+            if (res.ok) {
+                showNotification(this.t('deleteSuccess') || '删除任务成功');
+                this.fetchTasks(); // 刷新列表
+            } else {
+                console.error("Delete failed with status:", res.status);
+            }
+        } catch (e) { 
+            console.error("Network error during delete:", e); 
+        }
+    },
+
+    // 跳转设置
+    jumpToCLIConfig() {
+        this.activeMenu = 'toolkit';
+        this.subMenu = 'CLI';
+    },
+
+    formatTaskTime(isoStr) {
+        if (!isoStr) return '-';
+        const date = new Date(isoStr);
+        return date.toLocaleString();
+    },
+
+    getTaskStatusType(status) {
+        const map = {
+            'pending': 'info',
+            'running': 'primary',
+            'completed': 'success',
+            'failed': 'danger',
+            'cancelled': 'warning'
+        };
+        return map[status] || 'info';
+    },
+  // 打开任务结果弹窗
+  openTaskResult(task) {
+    this.selectedTaskTitle = `${this.t('taskResult') || '任务结果'}: ${task.title}`;
+    this.selectedTaskResult = task.result || '';
+    this.showTaskResultDialog = true;
+  },
+    
 }
