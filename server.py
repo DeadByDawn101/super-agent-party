@@ -1153,17 +1153,23 @@ async def dispatch_tool(tool_name: str, tool_params: dict, settings: dict) -> st
         elif tool_name == "query_task_progress":
             result = await query_task_progress(
                 workspace_dir=cwd,
+                task_id=tool_params.get("task_id"),           # 加上这个！
                 parent_task_id=tool_params.get("parent_task_id"),
-                status=tool_params.get("status")
+                status=tool_params.get("status"),
+                verbose=tool_params.get("verbose", False)     # 加上这个！
             )
             return result
         
         elif tool_name == "cancel_subtask":
-            result = await cancel_subtask(
+            result = await create_subtask(
+                title=tool_params.get("title"),
+                description=tool_params.get("description"),
+                agent_type=tool_params.get("agent_type", "default"),
                 workspace_dir=cwd,
-                task_id=tool_params.get("task_id")
+                settings=settings,
+                consensus_content=consensus_content,
+                parent_task_id=tool_params.get("parent_task_id")  # 这个漏了！
             )
-            return result
 
     if tool_name not in _TOOL_HOOKS:
         for server_name, mcp_client in mcp_client_list.items():
@@ -4867,28 +4873,6 @@ async def execute_tool_manually(request: Request):
     tool_func = _TOOL_HOOKS[tool_name]
     
     try:
-        if tool_name in ["create_subtask", "query_task_progress", "cancel_subtask"]:
-            cwd = settings.get("CLISettings", {}).get("cc_path")
-            
-            if tool_name == "create_subtask":
-                from pathlib import Path
-                import aiofiles
-                
-                consensus_content = None
-                consensus_file = Path(cwd) / ".agent" / "consensus.md"
-                if consensus_file.exists():
-                    async with aiofiles.open(consensus_file, 'r', encoding='utf-8') as f:
-                        consensus_content = await f.read()
-                
-                tool_params.update({
-                    "workspace_dir": cwd,
-                    "settings": settings,
-                    "consensus_content": consensus_content
-                })
-            
-            elif tool_name in ["query_task_progress", "cancel_subtask"]:
-                tool_params["workspace_dir"] = cwd
-
         # 2. 执行工具
         result = await tool_func(**tool_params)
         
