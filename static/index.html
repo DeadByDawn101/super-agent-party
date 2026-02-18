@@ -2566,6 +2566,12 @@ function updateElement(el, rawMarkdown, formatFn) {
                                 </el-option>
                               </el-select>
                             </el-form-item>
+                            <el-form-item :label="t('enableInfer')" class="form-item-align" label-position="left">
+                              <el-switch 
+                                v-model="newMemory.infer" 
+                                @change="autoSaveSettings"
+                              ></el-switch>
+                            </el-form-item>
                             <el-alert type="info" :closable="false" class="mb-2">
                               <template #default>
                                 <div class="alert-content">

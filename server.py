@@ -2271,7 +2271,7 @@ async def generate_stream_response(client,reasoner_client, request: ChatRequest,
             env_settings = {}
         
         permission_mode = env_settings.get("permissionMode", "default")
-        if permission_mode == "cowork":
+        if permission_mode == "cowork" and settings['CLISettings']['enabled'] and not request.is_sub_agent:
             tools.append(create_subtask_tool)
             tools.append(query_tasks_tool)
             tools.append(cancel_subtask_tool)
@@ -3724,13 +3724,14 @@ async def generate_stream_response(client,reasoner_client, request: ChatRequest,
                 if m0:
                     messages=f"用户说：{user_prompt}\n\n---\n\n你说：{full_content}"
                     executor = ThreadPoolExecutor()
+                    infer = cur_memory.get('infer') or False
                     async def add_async():
                         loop = asyncio.get_event_loop()
                         # 绑定 user_id 关键字参数
                         metadata = {
                             "timetamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                         }
-                        func = partial(m0.add, user_id=memoryId,metadata=metadata,infer=False)
+                        func = partial(m0.add, user_id=memoryId,metadata=metadata,infer=infer)
                         # 传递 messages 作为位置参数
                         await loop.run_in_executor(executor, func, messages)
                         print("知识库更新完成")
@@ -4651,13 +4652,14 @@ async def generate_complete_response(client,reasoner_client, request: ChatReques
         if m0:
             messages=f"用户说：{user_prompt}\n\n---\n\n你说：{response_dict["choices"][0]['message']['content']}"
             executor = ThreadPoolExecutor()
+            infer = cur_memory.get('infer') or False
             async def add_async():
                 loop = asyncio.get_event_loop()
                 # 绑定 user_id 关键字参数
                 metadata = {
                     "timetamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 }
-                func = partial(m0.add, user_id=memoryId,metadata=metadata,infer=False)
+                func = partial(m0.add, user_id=memoryId,metadata=metadata,infer=infer)
                 # 传递 messages 作为位置参数
                 await loop.run_in_executor(executor, func, messages)
                 print("知识库更新完成")

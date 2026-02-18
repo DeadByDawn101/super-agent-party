@@ -1581,6 +1581,7 @@ let vue_data = {
     newMemory: {
       id: null,
       name: '',
+      infer: false,
       providerId: null,
       model: '',
       base_url: '',
