@@ -1,4 +1,3 @@
-# py/task_center.py
 import asyncio
 import json
 import uuid
@@ -8,7 +7,7 @@ from typing import Dict, List, Optional, Any
 from enum import Enum
 import aiofiles
 import aiofiles.os
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 class TaskStatus(str, Enum):
     PENDING = "pending"
@@ -30,8 +29,9 @@ class SubTask(BaseModel):
     updated_at: str
     started_at: Optional[str] = None
     completed_at: Optional[str] = None
-    agent_type: str = "default"  # 使用的智能体类型
-    context: Dict[str, Any] = {}  # 额外的上下文信息
+    agent_type: str = "default"
+    # 使用 Field(default_factory=dict) 确保每个实例有独立的字典，防止引用污染
+    context: Dict[str, Any] = Field(default_factory=dict)
 
 class TaskCenter:
     """任务中心 - 管理所有主任务和子任务"""
@@ -104,7 +104,7 @@ class TaskCenter:
         status: Optional[TaskStatus] = None,
         result: Optional[str] = None,
         error: Optional[str] = None,
-        context: Optional[Dict[str, Any]] = None  # 👈 新增参数
+        context: Optional[Dict[str, Any]] = None
     ) -> bool:
         """更新任务进度和上下文"""
         async with self._lock:
@@ -112,9 +112,34 @@ class TaskCenter:
             if not task:
                 return False
             
-            task.progress = max(0, min(100, progress))
+            # --- 核心修复：进度计算逻辑优化 ---
+            
+            # 1. 基础范围限制 (0-100)
+            safe_progress = max(0, min(100, progress))
+            
+            # 2. 确定目标状态
+            target_status = status if status else task.status
+            
+            if target_status == TaskStatus.COMPLETED:
+                # 策略A：如果任务完成，强制进度为 100%
+                final_progress = 100
+            elif target_status == TaskStatus.FAILED:
+                 # 策略B：如果失败，保持当前最大进度或设定的进度，但不强制100
+                final_progress = max(task.progress, safe_progress)
+            elif target_status == TaskStatus.CANCELLED:
+                # 策略C：取消任务通常归零或保持现状，这里选择保持现状以免丢失上下文
+                final_progress = task.progress 
+            else:
+                # 策略D：运行中 (PENDING/RUNNING)
+                # 规则1：单调递增，不许回退 (取 old 和 new 的最大值)
+                final_progress = max(task.progress, safe_progress)
+                # 规则2：运行中封顶 99%，防止未完成却显示 100% 误导用户
+                final_progress = min(99, final_progress)
+            
+            task.progress = final_progress
             task.updated_at = datetime.now().isoformat()
             
+            # 3. 更新状态和时间戳
             if status:
                 task.status = status
                 if status == TaskStatus.RUNNING and not task.started_at:
@@ -129,9 +154,9 @@ class TaskCenter:
                 task.error = error
                 task.status = TaskStatus.FAILED
 
-            # ⭐ 核心逻辑：合并或更新 context
+            # 4. 合并上下文数据 (增量更新)
             if context is not None:
-                task.context.update(context) # 使用 update 保证不覆盖掉原有的其他 context 数据
+                task.context.update(context)
             
             await self._save_task(task)
             return True
@@ -147,13 +172,15 @@ class TaskCenter:
         if not self.task_dir.exists():
             return tasks
         
-        for task_file in self.task_dir.glob("*.json"):
+        # 获取所有json文件
+        files = list(self.task_dir.glob("*.json"))
+        
+        for task_file in files:
             try:
                 async with aiofiles.open(task_file, 'r', encoding='utf-8') as f:
                     data = await f.read()
                     task = SubTask.model_validate_json(data)
                     
-                    # 过滤条件
                     if parent_task_id is not None and task.parent_task_id != parent_task_id:
                         continue
                     if status is not None and task.status != status:
@@ -164,45 +191,19 @@ class TaskCenter:
                 print(f"Error loading task file {task_file}: {e}")
                 continue
         
-        # 按创建时间排序
+        # 按创建时间倒序排序
         tasks.sort(key=lambda x: x.created_at, reverse=True)
         return tasks
     
-    async def get_task_summary(self) -> Dict[str, Any]:
-        """获取任务中心摘要"""
-        all_tasks = await self.list_tasks()
-        
-        summary = {
-            "total": len(all_tasks),
-            "pending": 0,
-            "running": 0,
-            "completed": 0,
-            "failed": 0,
-            "cancelled": 0,
-            "tasks": []
-        }
-        
-        for task in all_tasks:
-            summary[task.status.value] += 1
-            summary["tasks"].append({
-                "task_id": task.task_id,
-                "title": task.title,
-                "status": task.status.value,
-                "progress": task.progress,
-                "created_at": task.created_at,
-                "updated_at": task.updated_at
-            })
-        
-        return summary
-    
     async def cancel_task(self, task_id: str) -> bool:
         """取消任务"""
+        # 取消时将状态设为 CANCELLED，进度通常不再增加
         return await self.update_task_progress(
             task_id=task_id,
-            progress=0,
+            progress=0, # 这里的数值会被上面的逻辑覆盖为 keep current
             status=TaskStatus.CANCELLED
         )
-    
+
     async def delete_task(self, task_id: str) -> bool:
         """删除任务文件"""
         async with self._lock:
@@ -217,10 +218,10 @@ class TaskCenter:
             return False
 
     async def cleanup_old_tasks(self, days: int = 7):
-        """清理旧任务（可选功能）"""
-        # 实现清理逻辑...
+        """清理旧任务（待实现）"""
         pass
 
+# --- 全局任务中心实例管理 ---
 
 # 全局任务中心实例字典 {workspace_path: TaskCenter}
 _task_centers: Dict[str, TaskCenter] = {}

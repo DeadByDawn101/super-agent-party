@@ -902,7 +902,8 @@ async def dispatch_tool(tool_name: str, tool_params: dict, settings: dict) -> st
     from py.task_tools import (
         create_subtask,
         query_task_progress,
-        cancel_subtask
+        cancel_subtask,
+        finish_task
     )
 
     # ==================== 2. 定义工具映射表 ====================
@@ -990,6 +991,7 @@ async def dispatch_tool(tool_name: str, tool_params: dict, settings: dict) -> st
         "create_subtask": create_subtask,
         "query_task_progress": query_task_progress,
         "cancel_subtask": cancel_subtask,
+        "finish_task":finish_task,
     }
     
     # ==================== 3. 权限拦截逻辑 (Human-in-the-loop) ====================
@@ -1125,7 +1127,7 @@ async def dispatch_tool(tool_name: str, tool_params: dict, settings: dict) -> st
                 return str(result)
                 
     # ==================== 5. 任务中心工具特殊处理 ====================
-    if tool_name in ["create_subtask", "query_task_progress", "cancel_subtask"]:
+    if tool_name in ["create_subtask", "query_task_progress", "cancel_subtask","finish_task"]:
         cli_settings = settings.get("CLISettings", {})
         cwd = cli_settings.get("cc_path")
         
@@ -1145,7 +1147,7 @@ async def dispatch_tool(tool_name: str, tool_params: dict, settings: dict) -> st
                 description=tool_params.get("description"),
                 agent_type=tool_params.get("agent_type", "default"),
                 workspace_dir=cwd,
-                settings=settings,  # 只需要传 settings
+                settings=settings, 
                 consensus_content=consensus_content
             )
             return result
@@ -1153,10 +1155,10 @@ async def dispatch_tool(tool_name: str, tool_params: dict, settings: dict) -> st
         elif tool_name == "query_task_progress":
             result = await query_task_progress(
                 workspace_dir=cwd,
-                task_id=tool_params.get("task_id"),           # 加上这个！
+                task_id=tool_params.get("task_id"),         
                 parent_task_id=tool_params.get("parent_task_id"),
                 status=tool_params.get("status"),
-                verbose=tool_params.get("verbose", False)     # 加上这个！
+                verbose=tool_params.get("verbose", False)  
             )
             return result
         
@@ -1168,8 +1170,15 @@ async def dispatch_tool(tool_name: str, tool_params: dict, settings: dict) -> st
                 workspace_dir=cwd,
                 settings=settings,
                 consensus_content=consensus_content,
-                parent_task_id=tool_params.get("parent_task_id")  # 这个漏了！
+                parent_task_id=tool_params.get("parent_task_id")
             )
+        elif tool_name == "finish_task":
+            result = await finish_task(
+                workspace_dir=cwd,
+                task_id=tool_params.get("task_id"),
+                result=tool_params.get("result"),
+            )
+            return result
 
     if tool_name not in _TOOL_HOOKS:
         for server_name, mcp_client in mcp_client_list.items():
@@ -2065,7 +2074,8 @@ async def generate_stream_response(client,reasoner_client, request: ChatRequest,
     from py.task_tools import (
         create_subtask_tool,
         query_tasks_tool,
-        cancel_subtask_tool
+        cancel_subtask_tool,
+        finish_task_tool,
     )
 
     m0 = None
@@ -2266,7 +2276,8 @@ async def generate_stream_response(client,reasoner_client, request: ChatRequest,
             tools.append(query_tasks_tool)
             tools.append(cancel_subtask_tool)
 
-
+        if request.is_sub_agent:
+            tools.append(finish_task_tool)
         # 如果是子智能体调用，或者指定了工具过滤规则
         if request.is_sub_agent or request.enable_tools or request.disable_tools:
             original_tool_count = len(tools)
@@ -2304,8 +2315,6 @@ async def generate_stream_response(client,reasoner_client, request: ChatRequest,
                 # 子智能体默认只保留安全的工具，移除高风险操作
                 SUBAGENT_BLOCKED_TOOLS = [
                     # 阻止子智能体执行系统命令
-                    "docker_sandbox_async",
-                    "bash_tool_local",
                     "claude_code_async",
                     "qwen_code_async",
                     
@@ -2324,7 +2333,7 @@ async def generate_stream_response(client,reasoner_client, request: ChatRequest,
                     
                     # 阻止子智能体使用 Agent 调用（防止复杂的嵌套）
                     "agent_tool_call",
-                    "a2a_tool_call",
+                    "todo_write_tool",
                 ]
                 
                 filtered_tools = []

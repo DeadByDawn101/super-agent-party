@@ -1493,7 +1493,12 @@ function updateElement(el, rawMarkdown, formatFn) {
                                     </el-button>
                                 </div>
 
-                                <el-empty v-if="taskList.length === 0" :description="t('noTasks')"></el-empty>
+                                <el-empty v-if="taskList.length === 0" :description="t('noTasks')">
+                                    <p style="color: var(--el-text-color-secondary); font-size: 14px;">{{ t('noTasksNotice') }}</p>
+                                    <el-button type="primary" @click="jumpToCLIConfig">
+                                        {{ t('goToCLIConfig') }}
+                                    </el-button>
+                                </el-empty>
 
                                 <div v-for="task in taskList" :key="task.task_id" class="task-card-item" style="margin-bottom: 12px; cursor: pointer;" @click="openTaskDetailView(task)">
                                     <el-card shadow="hover" :body-style="{ padding: '12px' }">

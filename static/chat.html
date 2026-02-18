@@ -1101,85 +1101,153 @@ function updateElement(el, rawMarkdown, formatFn) {
                 
                 <!-- 1. 任务中心视图 -->
                 <div v-if="activeSideView === 'tasks'" class="task-center-container">
-                    <div class="task-center-header">
-                        <el-button link @click="closeTaskCenter">
-                            <i class="fa-solid fa-chevron-left"></i> {{ t('back') }}
-                        </el-button>
-                        <span class="header-title">{{ t('taskCenter') }}</span>
-                        <div style="width: 40px;"></div>
-                    </div>
-
-                    <div class="task-content-wrapper">
-                        <!-- 状态 A: 未配置工作区 -->
-                        <div v-if="!hasWorkspacePath" class="task-empty-state">
-                            <el-empty :description="t('noWorkspaceConfigured')">
-                                <template #image>
-                                    <i class="fa-solid fa-folder-minus" style="font-size: 48px; color: var(--el-text-color-secondary);"></i>
-                                </template>
-                                <p class="empty-tip">{{ t('taskCenterNeedsCLI') }}</p>
-                                <el-button type="primary" @click="jumpToCLIConfig">
-                                    {{ t('goToCLIConfig') }}
-                                </el-button>
-                            </el-empty>
+                    
+                    <!-- A. 详情视图 (点击卡片后显示) -->
+                    <div v-if="viewingTaskDetail" class="task-detail-view" style="height: 100%; display: flex; flex-direction: column;">
+                        <div class="task-center-header" style="display: flex; align-items: center; padding: 10px; border-bottom: 1px solid var(--el-border-color-lighter);">
+                            <el-button link @click="closeTaskDetail">
+                                <i class="fa-solid fa-chevron-left"></i> {{ t('back') }}
+                            </el-button>
+                            <span class="header-title" style="flex: 1; text-align: center; font-weight: bold;">{{ t('taskTimeline') || '任务动态' }}</span>
+                            <div style="width: 40px;"></div>
                         </div>
-
-                        <!-- 状态 B: 任务列表 -->
-                        <div v-else class="task-list-wrapper">
-                            <div class="task-toolbar">
-                                <span class="toolbar-title">{{ t('taskList') }} ({{ taskList.length }})</span>
-                                <el-button type="primary" size="small" circle @click="showCreateTaskDialog = true">
-                                    <i class="fa-solid fa-plus"></i>
-                                </el-button>
-                            </div>
-
-                            <el-empty v-if="taskList.length === 0" :description="t('noTasks')"></el-empty>
-
-                            <div v-for="task in taskList" :key="task.task_id" class="task-card-item">
-                                <el-card shadow="hover" :body-style="{ padding: '12px' }">
-                                    <div class="task-card-header">
-                                        <div class="task-title-row">
-                                            <span class="task-title" :title="task.title">{{ task.title }}</span>
-                                        </div>
-                                        <el-tag size="small" :type="getTaskStatusType(task.status)">
-                                            {{ task.status }}
+                        
+                        <div class="task-detail-content" style="padding: 15px; overflow-y: auto; flex: 1;">
+                            <!-- 详情页顶部的任务摘要卡片 -->
+                            <div class="task-info-summary" style="padding: 0; margin-bottom: 15px;">
+                                <el-card shadow="never" :body-style="{ padding: '12px' }" style="border-style: dashed; background: var(--el-bg-color-page);">
+                                    <!-- 头部：标题和状态 -->
+                                    <div class="task-card-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                        <span style="font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 200px; color: var(--el-text-color-primary);">
+                                            {{ viewingTaskDetail.title }}
+                                        </span>
+                                        <el-tag size="small" :type="getTaskStatusType(viewingTaskDetail.status)">
+                                            {{ viewingTaskDetail.status }}
                                         </el-tag>
                                     </div>
 
-                                    <div class="task-card-desc">{{ task.description }}</div>
-
-                                    <div class="task-progress-bar" v-if="task.status === 'running'">
-                                        <el-progress :percentage="task.progress" :stroke-width="4" :show-text="false" status="success"></el-progress>
+                                    <!-- 描述：保持多行省略 -->
+                                    <div style="font-size: 12px; color: var(--el-text-color-secondary); margin-bottom: 10px; line-height: 1.4;">
+                                        {{ viewingTaskDetail.description }}
                                     </div>
 
-                                    <div class="task-card-footer">
-                                        <div class="task-meta-info">
-                                            <span class="task-time"><i class="fa-regular fa-clock"></i> {{ formatTaskTime(task.created_at) }}</span>
-                                            <span class="task-rounds" v-if="task.status === 'running' || task.status === 'completed'">
-                                                {{ task.progress }}%
-                                            </span>
-                                        </div>
-                                        
-                                        <div class="task-actions">
-                                            <el-tooltip :content="t('viewResult')" placement="top" v-if="task.result">
-                                                <el-button class="white-icon-btn" type="primary" link size="small" @click="openTaskResult(task)">
-                                                    <i class="fa-solid fa-eye"></i>
-                                                </el-button>
-                                            </el-tooltip>
+                                    <!-- 进度条：仅在运行时显示 -->
+                                    <div class="task-progress-bar" v-if="viewingTaskDetail.status === 'running'" style="margin-bottom: 10px;">
+                                        <el-progress :percentage="viewingTaskDetail.progress" :stroke-width="4" :show-text="false" status="success"></el-progress>
+                                    </div>
 
-                                            <el-tooltip :content="t('stopTask')" placement="top" v-if="['pending', 'running'].includes(task.status)">
-                                                <el-button type="warning" link size="small" @click="handleCancelTask(task.task_id)">
-                                                    <i class="fa-solid fa-stop"></i>
-                                                </el-button>
-                                            </el-tooltip>
-                                            
-                                            <el-tooltip :content="t('DeleteTask')" placement="top">
-                                                <el-button type="danger" link size="small" @click="handleDeleteTask(task.task_id)">
-                                                    <i class="fa-solid fa-trash-can"></i>
-                                                </el-button>
-                                            </el-tooltip>
-                                        </div>
+                                    <!-- 底部信息：时间 -->
+                                    <div class="task-card-footer" style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px; font-size: 11px;">
+                                        <span style="color: var(--el-text-color-placeholder);">
+                                            <i class="fa-regular fa-clock"></i> {{ formatTaskTime(viewingTaskDetail.created_at) }}
+                                        </span>
+                                        <span style="color: var(--el-text-color-placeholder);">ID: {{ viewingTaskDetail.task_id }}</span>
                                     </div>
                                 </el-card>
+                            </div>
+
+                            <el-divider content-position="left">{{ t('executionHistory') || '执行记录' }}</el-divider>
+
+                            <div class="timeline-wrapper">
+                                <el-empty v-if="!viewingTaskDetail.context || !viewingTaskDetail.context.history || viewingTaskDetail.context.history.length === 0" :description="t('noHistoryYet') || '暂无执行动态'"></el-empty>
+                                
+                                <el-timeline v-else>
+                                    <el-timeline-item
+                                        v-for="(log, index) in viewingTaskDetail.context.history"
+                                        :key="index"
+                                        :type="log.includes('❌') ? 'danger' : (log.includes('✅') ? 'success' : 'primary')"
+                                        size="large"
+                                    >
+                                        <div class="history-log-item markdown-body" style="font-size: 13px; line-height: 1.6; background: var(--el-bg-color-page); padding: 8px 12px; border-radius: 6px;">
+                                            <div v-html="formatMessage(log)"></div>
+                                        </div>
+                                    </el-timeline-item>
+                                    
+                                    <el-timeline-item v-if="viewingTaskDetail.status === 'running'" color="#409EFF">
+                                        <template #dot>
+                                            <i class="fa-solid fa-spinner fa-spin"></i>
+                                        </template>
+                                        <div style="color: var(--el-color-primary); font-size: 13px; font-style: italic;">
+                                            {{ t('taskExecuting') || '任务执行中...' }} ({{ viewingTaskDetail.progress }}%)
+                                        </div>
+                                    </el-timeline-item>
+                                </el-timeline>
+                            </div>
+
+                            <div v-if="viewingTaskDetail.result" style="margin-top: 20px; padding-bottom: 30px;">
+                                <el-button type="primary" style="width: 100%" @click="openTaskResult(viewingTaskDetail)">
+                                    <i class="fa-solid fa-square-poll-vertical"></i> {{ t('viewFinalResult') || '查看最终产出' }}
+                                </el-button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- B. 列表视图 (默认显示) -->
+                    <div v-else class="task-list-view" style="height: 100%; display: flex; flex-direction: column;">
+                        <div class="task-center-header" style="display: flex; align-items: center; padding: 10px; border-bottom: 1px solid var(--el-border-color-lighter);">
+                            <el-button link @click="closeTaskCenter">
+                                <i class="fa-solid fa-chevron-left"></i> {{ t('back') }}
+                            </el-button>
+                            <span class="header-title" style="flex: 1; text-align: center; font-weight: bold;">{{ t('taskCenter') }}</span>
+                            <div style="width: 40px;"></div>
+                        </div>
+
+                        <div class="task-content-wrapper" style="flex: 1; overflow-y: auto;">
+                            <!-- 状态 A: 未配置工作区 -->
+                            <div v-if="!hasWorkspacePath" class="task-empty-state" style="padding: 40px 20px; text-align: center;">
+                                <el-empty :description="t('noWorkspaceConfigured')">
+                                    <template #image>
+                                        <i class="fa-solid fa-folder-minus" style="font-size: 48px; color: var(--el-text-color-secondary);"></i>
+                                    </template>
+                                    <p style="color: var(--el-text-color-secondary); font-size: 14px;">{{ t('taskCenterNeedsCLI') }}</p>
+                                    <el-button type="primary" @click="jumpToCLIConfig">
+                                        {{ t('goToCLIConfig') }}
+                                    </el-button>
+                                </el-empty>
+                            </div>
+
+                            <!-- 状态 B: 任务列表 -->
+                            <div v-else class="task-list-wrapper" style="padding: 15px;">
+                                <div class="task-toolbar" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                                    <span style="font-weight: bold; font-size: 14px;">{{ t('taskList') }} ({{ taskList.length }})</span>
+                                    <el-button type="primary" size="small" circle @click="showCreateTaskDialog = true">
+                                        <i class="fa-solid fa-plus"></i>
+                                    </el-button>
+                                </div>
+
+                                <el-empty v-if="taskList.length === 0" :description="t('noTasks')">
+                                    <p style="color: var(--el-text-color-secondary); font-size: 14px;">{{ t('noTasksNotice') }}</p>
+                                    <el-button type="primary" @click="jumpToCLIConfig">
+                                        {{ t('goToCLIConfig') }}
+                                    </el-button>
+                                </el-empty>
+
+                                <div v-for="task in taskList" :key="task.task_id" class="task-card-item" style="margin-bottom: 12px; cursor: pointer;" @click="openTaskDetailView(task)">
+                                    <el-card shadow="hover" :body-style="{ padding: '12px' }">
+                                        <div class="task-card-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                            <span style="font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 180px;">{{ task.title }}</span>
+                                            <el-tag size="small" :type="getTaskStatusType(task.status)">{{ task.status }}</el-tag>
+                                        </div>
+
+                                        <div style="font-size: 12px; color: var(--el-text-color-secondary); margin-bottom: 10px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">{{ task.description }}</div>
+
+                                        <div class="task-progress-bar" v-if="task.status === 'running'" style="margin-bottom: 10px;">
+                                            <el-progress :percentage="task.progress" :stroke-width="4" :show-text="false" status="success"></el-progress>
+                                        </div>
+
+                                        <div class="task-card-footer" style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px; font-size: 12px;">
+                                            <span style="color: var(--el-text-color-placeholder);"><i class="fa-regular fa-clock"></i> {{ formatTaskTime(task.created_at) }}</span>
+                                            <div class="task-actions" @click.stop>
+                                                <el-button v-if="['pending', 'running'].includes(task.status)" type="warning" link size="small" @click.stop="handleCancelTask(task.task_id)">
+                                                    <i class="fa-solid fa-stop"></i>
+                                                </el-button>
+                                                <el-button type="danger" link size="small" @click.stop="handleDeleteTask(task.task_id)">
+                                                    <i class="fa-solid fa-trash-can"></i>
+                                                </el-button>
+                                            </div>
+                                        </div>
+                                    </el-card>
+                                </div>
                             </div>
                         </div>
                     </div>
