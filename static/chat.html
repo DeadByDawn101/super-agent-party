@@ -223,6 +223,7 @@ function updateElement(el, rawMarkdown, formatFn) {
         :title="t('logoPage')"
         width="90%">
         <!-- logo页面 -->
+        <div v-show="activeMenu === 'logo'" class="page logo-container">
           <div class="license-notice">
             <h1>Super Agent Party v0.3.8</h1>
             <h3>开源协议声明 / Open Source License</h3>
@@ -246,10 +247,10 @@ function updateElement(el, rawMarkdown, formatFn) {
             <div class="social-links">
               <div class="link-item">
                 <span>Official Website：</span>
-                <a href="https://super-agent-party.github.io/" 
+                <a href="https://www.agentparty.top/" 
                   target="_blank" 
                   class="social-link">
-                  super-agent-party.github.io
+                  www.agentparty.top
                 </a>
               </div>
 
@@ -304,7 +305,7 @@ function updateElement(el, rawMarkdown, formatFn) {
               </div>
 
               <div class="link-item">
-                <span>中文文档：</span>
+                <span>中文使用指南：</span>
                 <a href="https://gcnij7egmcww.feishu.cn/wiki/DPRKwdetCiYBhPkPpXWcugujnRc" 
                   target="_blank" 
                   class="social-link">
@@ -313,7 +314,7 @@ function updateElement(el, rawMarkdown, formatFn) {
               </div>
 
               <div class="link-item">
-                <span>English Doc：</span>
+                <span>English Usage Guide：</span>
                 <a href="https://temporal-lantern-7e8.notion.site/super-agent-party-211b2b2cb6f180c899d1c27a98c4965d" 
                   target="_blank" 
                   class="social-link">
@@ -335,6 +336,7 @@ function updateElement(el, rawMarkdown, formatFn) {
               </p>
             </div>
           </div>
+        </div>
       </el-dialog>  
       <!-- 扩展选择对话框 -->
       <el-dialog
@@ -1067,7 +1069,7 @@ function updateElement(el, rawMarkdown, formatFn) {
                         <i :class="isSending ? 'fa-solid fa-stop' : 'fa-solid fa-paper-plane'" aria-hidden="true"></i>
                       </el-button>
                     </el-tooltip>
-                    
+
                     <el-tooltip :content="t('logoPage')" placement="top">
                       <el-button
                         plain
