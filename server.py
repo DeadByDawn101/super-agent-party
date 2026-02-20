@@ -1472,25 +1472,25 @@ async def tools_change_messages(request: ChatRequest, settings: dict):
 
 #### **编程语言和运行时**
 1. **Python**
-   - Python 3.13.7
-   - pip 25.1.1
-   - uv 0.9.26
+   - Python
+   - pip
+   - uv
 
 2. **Node.js**
-   - Node.js v20.19.4
-   - npm 9.2.0
-   - npx 9.2.0
+   - Node.js
+   - npm
+   - npx
 
 3. **Go**
-   - Go 1.24.4
+   - Go
 
 4. **Perl**
-   - Perl 已安装
+   - Perl
 
 #### **版本控制和协作工具**
 1. **Git**
-   - git 2.51.0
-   - **GitHub CLI (gh)** 2.46.0
+   - git
+   - GitHub CLI (gh)
 
 #### **包管理和构建工具**
 1. **Python 包管理**
@@ -1521,7 +1521,7 @@ async def tools_change_messages(request: ChatRequest, settings: dict):
 
 #### **网络工具**
 1. **HTTP 客户端**
-   - curl 8.14.1
+   - curl
 
 2. **安全工具**
    - openssl
@@ -1531,6 +1531,7 @@ async def tools_change_messages(request: ChatRequest, settings: dict):
 1. **进程和资源监控**
    - top / ps
    - free / df / du
+   
 """
             content_append(request.messages, 'system', system_context)
 
