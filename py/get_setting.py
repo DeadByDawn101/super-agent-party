@@ -102,6 +102,18 @@ STATIC_DIR = os.path.join(base_path, "static")
 DATABASE_PATH = os.path.join(USER_DATA_DIR, 'super_agent_party.db')
 COVS_PATH = os.path.join(USER_DATA_DIR, "conversations.db")
 
+# 批量创建目录
+dirs_to_create = [
+    USER_DATA_DIR, LOG_DIR, MEMORY_CACHE_DIR, UPLOAD_FILES_DIR, 
+    TOOL_TEMP_DIR, AGENT_DIR, KB_DIR, EXT_DIR, 
+    DEFAULT_ASR_DIR, DEFAULT_EBD_DIR, CONFIG_BASE_PATH, SKILLS_DIR
+]
+for d in set(dirs_to_create):
+    try:
+        os.makedirs(d, exist_ok=True)
+    except Exception:
+        pass
+
 # ----------------- 3. 关键修复：恢复全局 BLOCKLIST 变量 -----------------
 # 兼容 py/load_files.py 的导入需求
 # 虽然有一点点 I/O，但为了保证不报错，这里必须直接执行
@@ -200,18 +212,6 @@ async def _copy_default_skills():
 async def init_db():
     global _db_init_done
     if _db_init_done: return
-    
-    # 批量创建目录
-    dirs_to_create = [
-        USER_DATA_DIR, LOG_DIR, MEMORY_CACHE_DIR, UPLOAD_FILES_DIR, 
-        TOOL_TEMP_DIR, AGENT_DIR, KB_DIR, EXT_DIR, 
-        DEFAULT_ASR_DIR, DEFAULT_EBD_DIR, CONFIG_BASE_PATH, SKILLS_DIR
-    ]
-    for d in set(dirs_to_create):
-        try:
-            os.makedirs(d, exist_ok=True)
-        except Exception:
-            pass
 
     async with aiosqlite.connect(DATABASE_PATH) as db:
         await db.execute('''
