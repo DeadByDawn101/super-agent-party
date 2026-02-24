@@ -25,49 +25,29 @@
 
 ### 🚀 **一款拥有无限可能的AI桌面伴侣！**
 
-- ✅ 全渠道一键部署：支持将智能体配置快速部署至多类终端，已兼容经典聊天界面、桌宠机器人、QQ、飞书、Telegram、Discord、Slack聊天机器人、B站、YouTube、twitch直播机器人等场景，开箱即用。
+#### VRM桌宠：支持上传自定义VRM模型，打造专属桌面伴侣
+![image](doc/image/img-1/vrm.jpeg)
 
-- ✅ 生态工具互联：可自由接入第三方智能体与工作流作为工具链（已适配Home Assistant/Claude code/Qwen code/Dify/ComfyUI/MCP/A2A等系统），通过agent-party架构实现跨平台能力聚合。
+#### 任务中心：让你的AI智能体可以在后台执行任何高级任务，自动控制电脑帮你干活
+![image](doc/image/img-1/task.jpeg)
 
-- ✅ 扩展生态丰富：支持自定义扩展开发，通过官网的[扩展市场](https://super-agent-party.github.io/plugins.html)实现社区共享，满足个性化需求。
+#### 多角色群聊：支持酒馆角色卡，支持长期记忆，你可以同时和多个角色一起聊天！
+![image](doc/image/img-1/group.jpeg)
 
-- ✅ 标准化接口开放：提供OpenAI API兼容接口及MCP协议支持，便于开发者直接对接外部系统，实现智能体能力的快速转接与二次开发。VRM桌宠开放了VMC协议，实现跨应用动作同步。VRM桌宠界面支持了webXR协议，你可以在支持XR的设备中沉浸式体验。
+#### 即时通讯机器人：支持一键部署到QQ、飞书、钉钉、Telegram、Discord、Slack
+![image](doc/image/img-1/im.jpeg)
 
-- ✅ 无缝能力增强：无需代码改造即可实现LLM API企业级升级，为现有模型接口无缝集成知识库、实时联网、永久记忆、兼容酒馆(SillyTavern)角色卡、代码执行、多模态能力（视觉/绘图/听觉/语音）、自动化能力（控制智能家居、控制浏览器）、深度思考控制与研究等模块化功能，打造可插拔的LLM增强中台。
+#### 直播机器人：支持一键部署到B站、YouTube、twitch
+![image](doc/image/img-1/yt.jpeg)
 
-- ✅ 全平台兼容适配：覆盖Windows/macOS/Linux原生运行环境，支持Docker容器化部署与Web端云服务，满足多场景技术栈需求。
+#### AI浏览器：让你的AI智能体拥有自己的浏览器，支持自动控制
+![image](doc/image/img-1/browser.jpeg)
 
-## 软件截图
+#### 扩展系统：支持安装扩展，和自己创造新的扩展，下图为galgame扩展
+![image](doc/image/img-1/ext.jpeg)
 
-### 多服务商支持：本地部署引擎(ollama/dify等等)以及云服务商接口均支持
-![image](doc/image/1.jpeg)
-
-### 海量工具：内置各种工具(如知识库、联网、智能家居、浏览器控制)，支持异步调用，不阻塞智能体回复
-![image](doc/image/2.jpeg)
-
-### VRM桌宠：支持上传自定义VRM模型，打造专属桌面伴侣
-![image](doc/image/3.jpeg)
-
-### 扩展系统：支持安装扩展，和自己创造新的扩展，下图为galgame扩展
-![image](doc/image/4.jpeg)
-
-### 酒馆角色卡：支持酒馆角色卡，支持长期记忆
-![image](doc/image/5.jpeg)
-
-### 即时通讯机器人：支持一键部署到QQ、飞书、Telegram、Discord、Slack
-![image](doc/image/6-1.jpeg)
-
-### 直播机器人：支持一键部署到B站、YouTube、twitch
-![image](doc/image/7.jpeg)
-
-### 开发者友好：开放openai API接口、MCP接口，可以将智能体对外转接
-![image](doc/image/8.jpeg)
-
-### AI浏览器：让你的AI智能体拥有自己的浏览器，支持自动控制
-![image](doc/image/9.jpeg)
-
-### 多角色群聊：你可以同时和多个角色一起聊天！
-![image](doc/image/10.jpeg)
+#### 开发者友好：开放openai API接口、MCP接口，可以将智能体对外转接
+![image](doc/image/img-1/api.jpeg)
 
 ## 快速开始
 

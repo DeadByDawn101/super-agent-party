@@ -26,49 +26,29 @@
 
 ### 🚀 **An AI desktop companion with endless possibilities!**  
 
-- ✅ Omnichannel One-Click Deployment: Supports rapid deployment of agent configurations to multiple terminals, already compatible with scenarios such as classic chat interfaces, desktop companion, QQ, Feishu, Telegram, Discord, Slack chatbots, Bilibili, YouTube, Twitch live-streaming bots, and more—ready to use out of the box.  
+#### VRM Desktop Pet: Supports uploading custom VRM models to create your exclusive desktop companion
+![image](doc/image/img-2/vrm.jpeg)
 
-- ✅ Ecosystem Tool Interconnectivity: Freely integrates third-party agents and workflows as toolchains (already adapted for systems like Home Assistant, Claude Code, Qwen Code, Dify, ComfyUI, MCP, A2A, etc.), enabling cross-platform capability aggregation through the Agent-Party architecture.  
+#### Task Center: Enables your AI agents to perform any advanced tasks in the background, automatically controlling your computer to get work done
+![image](doc/image/img-2/task.jpeg)
 
-- ✅ Rich Extension Ecosystem: Supports custom extension development, with community sharing via the official [Extension Marketplace](https://super-agent-party.github.io/plugins.html) to meet personalized needs.  
+#### Multi-Role Group Chat: Supports tavern character cards and long-term memory, allowing you to chat with multiple characters simultaneously!
+![image](doc/image/img-2/group.jpeg)
 
-- ✅ Standardized interface openness: Provides OpenAI API-compatible interfaces and MCP protocol support, facilitating developers' direct integration with external systems for rapid agent capability transfer and secondary development. The VRM desktop pet supports the VMC protocol, enabling cross-application action synchronization. The VRM desktop pet interface also supports the webXR protocol, allowing immersive experiences on XR-compatible devices.
+#### Instant Messaging Bot: Supports one-click deployment to QQ, Feishu, DingTalk, Telegram, Discord, Slack
+![image](doc/image/img-2/im.jpeg)
 
-- ✅ Seamless capability enhancement: It is possible to achieve an enterprise-level upgrade of the LLM API without code modification, seamlessly integrating knowledge bases, real-time networking, permanent memory, compatible SillyTavern Character Card, code execution, multimodal capabilities (vision/drawing/audition/speech), Automation capabilities (controlling smart homes, controlling browsers), deep thinking control and research, and other modular functions into the existing model interface, creating a pluggable LLM enhancement platform.
+#### Live Streaming Bot: Supports one-click deployment to Bilibili, YouTube, Twitch
+![image](doc/image/img-2/yt.jpeg)
 
-- ✅ Compatible and adaptable across all platforms: It covers the native running environments of Windows/macOS/Linux, supports Docker containerized deployment and web-based cloud services, and meets the needs of multi-scene technology stacks.
+#### AI Browser: Equips your AI agents with their own browser, supporting automatic control
+![image](doc/image/img-2/browser.jpeg)
 
-## Software Screenshots
+#### Extension System: Supports installing extensions and creating new ones yourself. The image below shows a galgame extension
+![image](doc/image/img-2/ext.jpeg)
 
-### Multi-Service Provider Support: Supports both locally deployed engines (e.g., Ollama, Dify) and cloud service provider APIs.
-![image](doc/image/1.jpeg)
-
-### Extensive Tool Integration: Built-in various tools (e.g., knowledge base, web search, smart home control, browser automation), supporting asynchronous invocation without blocking agent responses.
-![image](doc/image/2.jpeg)
-
-### VRM Desktop Pet: Supports uploading custom VRM models to create a personalized desktop companion.
-![image](doc/image/3.jpeg)
-
-### Extension System: Supports installing extensions and creating new ones. The image below shows a galgame extension.  
-![image](doc/image/4.jpeg)
-
-### Tavern Character Cards: Supports Tavern character cards with long-term memory capabilities.
-![image](doc/image/5.jpeg)
-
-### Instant Messaging Bot: Supports One-Click Deployment to QQ, Feishu, Telegram, Discord, Slack
-![image](doc/image/6-1.jpeg)
-
-### Live Streaming Bot: Supports One-Click Deployment to Bilibili, YouTube, and Twitch
-![image](doc/image/7.jpeg)
-
-### Developer-Friendly: Provides open OpenAI API and MCP interfaces, allowing the agent to be exposed externally.
-![image](doc/image/8.jpeg)
-
-### AI Browser: Empower Your AI Agents with Their Own Browser, Supporting Automatic Control
-![image](doc/image/9.jpeg)
-
-### Multi-Role Group Chat: You can chat with multiple characters at the same time!
-![image](doc/image/10.jpeg)
+#### Developer-Friendly: Offers open OpenAI API interfaces and MCP interfaces, allowing agents to be externally connected
+![image](doc/image/img-2/api.jpeg)
 
 ## Quick Start
 

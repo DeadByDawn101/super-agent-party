@@ -11730,6 +11730,9 @@ clearSegments() {
   
   // 切换到默认视图
   resetToDefaultView() {
+    this.extensionsSystemPromptsDict = {}; // 清空提示词字典
+    this.currentExtension = null;
+    console.log('已切换到默认视图');
     this.loadExtension(null);
     this.showExtensionsDialog = false;
     this.expandChatArea();
