@@ -655,9 +655,41 @@ async def list_files_tool(path: str = ".", show_all: bool = True) -> str:
     except Exception as e: return str(e)
 
 async def read_file_tool(path: str) -> str:
+    """[Docker] 读取文件：增加大小限制和结构化提示"""
     try:
         real_cwd = await _get_current_cwd()
-        return await _exec_docker_cmd_simple(real_cwd, ["cat", "-n", path])
+        # 使用 shell 脚本限制读取前 2000 行，并返回总行数提示
+        script = f"""
+        if [ ! -f "{path}" ]; then echo "[Error] File not found: {path}"; exit 0; fi
+        total=$(wc -l < "{path}" 2>/dev/null || echo 0)
+        head -n 2000 "{path}" | cat -n
+        if [ "$total" -gt 2000 ]; then
+            echo ""
+            echo "... [Warning] File truncated (Too large). Showing 1 to 2000 of $total lines."
+            echo "💡 [Next Step Hint] Use 'read_file_range' to read specific lines (e.g. start: 2001, end: 2500) or 'tail_file' to read the end of the log."
+        fi
+        """
+        return await _exec_docker_cmd_simple(real_cwd, ["sh", "-c", script])
+    except Exception as e: return str(e)
+
+async def read_file_range_tool(path: str, start_line: int, end_line: int) -> str:
+    """[Docker] 精准读取文件指定行范围"""
+    try:
+        if start_line < 1 or end_line < start_line:
+            return "[Error] Invalid line range."
+        real_cwd = await _get_current_cwd()
+        # 使用 awk 高效读取指定行，并带上行号
+        script = f"""awk 'NR>={start_line} && NR<={end_line} {{printf "%5d | %s\\n", NR, $0}}' "{path}" """
+        return await _exec_docker_cmd_simple(real_cwd, ["sh", "-c", script])
+    except Exception as e: return str(e)
+
+async def tail_file_tool(path: str, lines: int = 100) -> str:
+    """[Docker] 读取文件末尾（常用于日志）"""
+    try:
+        real_cwd = await _get_current_cwd()
+        # 先打行号，再 tail
+        script = f"""cat -n "{path}" | tail -n {lines}"""
+        return await _exec_docker_cmd_simple(real_cwd, ["sh", "-c", script])
     except Exception as e: return str(e)
 
 async def edit_file_tool(path: str, content: str) -> str:
@@ -970,61 +1002,86 @@ async def list_files_tool_local(path: str = ".", show_all: bool = True) -> str:
         return f"[Error] List failed: {str(e)}"
 
 async def read_file_tool_local(path: str) -> str:
-    """[Local] 读取文件：支持大文件截断读取 (Max 2000行)，自动检测二进制文件"""
+    """[Local] 读取文件：支持大文件截断读取，并返回结构化下一步建议"""
     try:
         cwd = await _get_current_cwd()
         target = resolve_strict_path(cwd, path, check_symlink=True)
 
-        if not target.exists():
-            return f"[Error] File not found: {path}"
-        
-        if not target.is_file():
-            return f"[Error] Not a file: {path}"
+        if not target.exists() or not target.is_file():
+            return f"[Error] File not found or not a file: {path}"
 
-        # 1. 二进制文件快速检测 (读取前1KB检查空字节)
         try:
             with open(target, 'rb') as f_bin:
-                chunk = f_bin.read(1024)
-                if b'\0' in chunk:
+                if b'\0' in f_bin.read(1024):
                     return f"[Error] Cannot read binary file: {path}"
         except Exception as e:
             return f"[Error] Failed to check file type: {str(e)}"
 
-        # 2. 限制读取大小，防止内存爆炸
         MAX_LINES = 2000
-        MAX_BYTES = 500 * 1024  # 500KB Limit
-        
+        MAX_BYTES = 500 * 1024  
         file_size = target.stat().st_size
         truncated = False
         
         async with aiofiles.open(target, 'r', encoding='utf-8', errors='replace') as f:
-            # 如果文件过大，只读取部分字符
             if file_size > MAX_BYTES:
                 content = await f.read(MAX_BYTES)
                 truncated = True
                 lines = content.splitlines()
-                # 丢弃最后一行，因为可能被字节限制截断了一半
                 if lines: lines.pop()
             else:
                 lines = await f.readlines()
-                # 去除末尾换行符
                 lines = [l.rstrip('\n') for l in lines]
 
-        # 行数截断
         if len(lines) > MAX_LINES:
             lines = lines[:MAX_LINES]
             truncated = True
 
-        # 格式化输出：行号 + 内容
         output = [f"{i+1:4} | {line}" for i, line in enumerate(lines)]
         
         if truncated:
             output.append(f"\n... [Warning] File content truncated (Too large). Showing first {len(lines)} lines.")
+            output.append(f"💡 [Next Step Hint] The file is large. Use 'read_file_range_local' to read lines {len(lines)+1} to {len(lines)+500}, or 'tail_file_local' to view the end.")
             
         return "\n".join(output)
+    except Exception as e: return f"[Error] Read failed: {str(e)}"
 
-    except Exception as e:
-        return f"[Error] Read failed: {str(e)}"
+async def read_file_range_tool_local(path: str, start_line: int, end_line: int) -> str:
+    """[Local] 精准读取文件指定行范围"""
+    try:
+        if start_line < 1 or end_line < start_line:
+            return "[Error] Invalid line range. start_line must be >= 1 and end_line >= start_line."
+            
+        cwd = await _get_current_cwd()
+        target = resolve_strict_path(cwd, path, check_symlink=True)
+        
+        if not target.exists() or not target.is_file(): return f"[Error] File not found: {path}"
+
+        async with aiofiles.open(target, 'r', encoding='utf-8', errors='replace') as f:
+            lines = await f.readlines()
+            
+        if start_line > len(lines):
+            return f"[Error] start_line ({start_line}) is beyond file length ({len(lines)})."
+            
+        subset = lines[start_line - 1 : end_line]
+        return "\n".join(f"{i + start_line:4} | {line.rstrip('\n')}" for i, line in enumerate(subset))
+    except Exception as e: return f"[Error] Range read failed: {str(e)}"
+
+async def tail_file_tool_local(path: str, lines: int = 100) -> str:
+    """[Local] 读取文件末尾（常用于日志）"""
+    try:
+        cwd = await _get_current_cwd()
+        target = resolve_strict_path(cwd, path, check_symlink=True)
+        if not target.exists() or not target.is_file(): return f"[Error] File not found: {path}"
+
+        # 本地简单实现：读入后切片（如果文件极大建议改用 seek 倒序读，但此处通常够用）
+        async with aiofiles.open(target, 'r', encoding='utf-8', errors='replace') as f:
+            all_lines = await f.readlines()
+            
+        subset = all_lines[-lines:] if lines < len(all_lines) else all_lines
+        start_idx = max(1, len(all_lines) - lines + 1)
+        
+        return "\n".join(f"{i + start_idx:4} | {line.rstrip('\n')}" for i, line in enumerate(subset))
+    except Exception as e: return f"[Error] Tail failed: {str(e)}"
 
 async def edit_file_tool_local(path: str, content: str) -> str:
     """[Local] 写入文件：修复了绝对路径误判问题"""
@@ -1597,6 +1654,35 @@ TOOLS_REGISTRY = {
             }
         }
     },
+    "read_file_range": {
+        "type": "function", "function": {
+            "name": "read_file_range_tool", 
+            "description": "Read a specific range of lines from a file. Useful for large files after grepping.",
+            "parameters": {
+                "type": "object", 
+                "properties": {
+                    "path": {"type": "string", "description": "Relative path to file"},
+                    "start_line": {"type": "integer"},
+                    "end_line": {"type": "integer"}
+                }, 
+                "required": ["path", "start_line", "end_line"]
+            }
+        }
+    },
+    "tail_file": {
+        "type": "function", "function": {
+            "name": "tail_file_tool", 
+            "description": "Read the last N lines of a file. Useful for reading logs.",
+            "parameters": {
+                "type": "object", 
+                "properties": {
+                    "path": {"type": "string", "description": "Relative path to file"},
+                    "lines": {"type": "integer", "default": 100, "description": "Number of lines to read from the end"}
+                }, 
+                "required": ["path"]
+            }
+        }
+    },
     "search_files": {
         "type": "function", "function": {
             "name": "search_files_tool", 
@@ -1777,6 +1863,35 @@ LOCAL_TOOLS_REGISTRY = {
             }
         }
     },
+    "read_file_range_local": {
+        "type": "function", "function": {
+            "name": "read_file_range_tool_local", 
+            "description": "Read a specific range of lines from a local file. Useful for large files after grepping.",
+            "parameters": {
+                "type": "object", 
+                "properties": {
+                    "path": {"type": "string", "description": "Relative path to file"},
+                    "start_line": {"type": "integer"},
+                    "end_line": {"type": "integer"}
+                }, 
+                "required": ["path", "start_line", "end_line"]
+            }
+        }
+    },
+    "tail_file_local": {
+        "type": "function", "function": {
+            "name": "tail_file_tool_local", 
+            "description": "Read the last N lines of a local file. Useful for reading logs.",
+            "parameters": {
+                "type": "object", 
+                "properties": {
+                    "path": {"type": "string", "description": "Relative path to file"},
+                    "lines": {"type": "integer", "default": 100}
+                }, 
+                "required": ["path"]
+            }
+        }
+    },
     "search_files_local": {
          "type": "function", "function": {
             "name": "search_files_tool_local", 
@@ -1940,6 +2055,8 @@ def get_tools_for_mode(mode: str) -> list:
     # 基础只读
     read = [TOOLS_REGISTRY["list_files"], 
             TOOLS_REGISTRY["read_file"], 
+            TOOLS_REGISTRY["read_file_range"],
+            TOOLS_REGISTRY["tail_file"],     
             TOOLS_REGISTRY["search_files"], 
             TOOLS_REGISTRY["glob_files"],
             TOOLS_REGISTRY["read_skill"]
@@ -1959,9 +2076,11 @@ def get_local_tools_for_mode(mode: str) -> list:
     read = [
         LOCAL_TOOLS_REGISTRY["list_files_local"], 
         LOCAL_TOOLS_REGISTRY["read_file_local"], 
+        LOCAL_TOOLS_REGISTRY["read_file_range_local"],
+        LOCAL_TOOLS_REGISTRY["tail_file_local"],    
         LOCAL_TOOLS_REGISTRY["search_files_local"], 
         LOCAL_TOOLS_REGISTRY["glob_files_local"],
-        LOCAL_TOOLS_REGISTRY["read_skill_local"] # <--- 新增
+        LOCAL_TOOLS_REGISTRY["read_skill_local"] 
     ]
     edit = [LOCAL_TOOLS_REGISTRY["edit_file_local"], LOCAL_TOOLS_REGISTRY["edit_file_patch_local"], LOCAL_TOOLS_REGISTRY["todo_write_local"]]
     infra = [

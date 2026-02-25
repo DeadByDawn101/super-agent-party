@@ -855,6 +855,8 @@ async def dispatch_tool(tool_name: str, tool_params: dict, settings: dict) -> st
         docker_sandbox_async,
         list_files_tool,
         read_file_tool,
+        read_file_range_tool, 
+        tail_file_tool,     
         search_files_tool,
         edit_file_tool,
         edit_file_patch_tool, 
@@ -870,6 +872,8 @@ async def dispatch_tool(tool_name: str, tool_params: dict, settings: dict) -> st
         bash_tool_local,           # 本地 bash 执行（对应 docker_sandbox_async）
         list_files_tool_local,     # 本地文件列表
         read_file_tool_local,      # 本地文件读取
+        read_file_range_tool_local, # <--- 新增导入
+        tail_file_tool_local,       # <--- 新增导入
         search_files_tool_local,   # 本地文件搜索
         edit_file_tool_local,      # 本地文件写入
         edit_file_patch_tool_local,# 本地精确替换
@@ -966,6 +970,8 @@ async def dispatch_tool(tool_name: str, tool_params: dict, settings: dict) -> st
         "docker_sandbox_async": docker_sandbox_async,
         "list_files_tool": list_files_tool,
         "read_file_tool": read_file_tool,
+        "read_file_range_tool": read_file_range_tool, # <--- 映射新工具
+        "tail_file_tool": tail_file_tool,             # <--- 映射新工具
         "search_files_tool": search_files_tool,
         "edit_file_tool": edit_file_tool,
         "edit_file_patch_tool": edit_file_patch_tool,
@@ -979,6 +985,8 @@ async def dispatch_tool(tool_name: str, tool_params: dict, settings: dict) -> st
         "bash_tool_local": bash_tool_local,                     # 本地 bash 执行
         "list_files_tool_local": list_files_tool_local,         # 本地文件列表
         "read_file_tool_local": read_file_tool_local,           # 本地文件读取
+        "read_file_range_tool_local": read_file_range_tool_local, # <--- 映射新工具
+        "tail_file_tool_local": tail_file_tool_local,             # <--- 映射新工具
         "search_files_tool_local": search_files_tool_local,     # 本地文件搜索
         "edit_file_tool_local": edit_file_tool_local,           # 本地文件写入
         "edit_file_patch_tool_local": edit_file_patch_tool_local,  # 本地精确替换
@@ -4833,6 +4841,8 @@ async def execute_tool_manually(request: Request):
         docker_sandbox_async,
         list_files_tool,
         read_file_tool,
+        read_file_range_tool, 
+        tail_file_tool,     
         search_files_tool,
         edit_file_tool,
         edit_file_patch_tool, 
@@ -4848,6 +4858,8 @@ async def execute_tool_manually(request: Request):
         bash_tool_local,           # 本地 bash 执行（对应 docker_sandbox_async）
         list_files_tool_local,     # 本地文件列表
         read_file_tool_local,      # 本地文件读取
+        read_file_range_tool_local, # <--- 新增导入
+        tail_file_tool_local,       # <--- 新增导入
         search_files_tool_local,   # 本地文件搜索
         edit_file_tool_local,      # 本地文件写入
         edit_file_patch_tool_local,# 本地精确替换
@@ -4880,7 +4892,8 @@ async def execute_tool_manually(request: Request):
     from py.task_tools import (
         create_subtask,
         query_task_progress,
-        cancel_subtask
+        cancel_subtask,
+        finish_task
     )
 
     # ==================== 2. 定义工具映射表 ====================
@@ -4943,6 +4956,8 @@ async def execute_tool_manually(request: Request):
         "docker_sandbox_async": docker_sandbox_async,
         "list_files_tool": list_files_tool,
         "read_file_tool": read_file_tool,
+        "read_file_range_tool": read_file_range_tool, # <--- 映射新工具
+        "tail_file_tool": tail_file_tool,             # <--- 映射新工具
         "search_files_tool": search_files_tool,
         "edit_file_tool": edit_file_tool,
         "edit_file_patch_tool": edit_file_patch_tool,
@@ -4956,6 +4971,8 @@ async def execute_tool_manually(request: Request):
         "bash_tool_local": bash_tool_local,                     # 本地 bash 执行
         "list_files_tool_local": list_files_tool_local,         # 本地文件列表
         "read_file_tool_local": read_file_tool_local,           # 本地文件读取
+        "read_file_range_tool_local": read_file_range_tool_local, # <--- 映射新工具
+        "tail_file_tool_local": tail_file_tool_local,             # <--- 映射新工具
         "search_files_tool_local": search_files_tool_local,     # 本地文件搜索
         "edit_file_tool_local": edit_file_tool_local,           # 本地文件写入
         "edit_file_patch_tool_local": edit_file_patch_tool_local,  # 本地精确替换
@@ -4968,9 +4985,10 @@ async def execute_tool_manually(request: Request):
         "create_subtask": create_subtask,
         "query_task_progress": query_task_progress,
         "cancel_subtask": cancel_subtask,
-
+        "finish_task":finish_task,
     }
     
+
     if tool_name not in _TOOL_HOOKS:
         return {"result": f"Tool {tool_name} not found in backend registry."}
     
