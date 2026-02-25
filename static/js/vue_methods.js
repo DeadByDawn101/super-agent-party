@@ -1808,7 +1808,6 @@ let vue_methods = {
         let tts_buffer = '';
         let isCodeBlock = false;
         this.cur_voice = 'default';
-        let max_rounds = this.settings.max_rounds || 0;
         
         const toolCallStack = [];
         // 内部函数：准备发送给 API 的消息历史
@@ -1899,7 +1898,7 @@ let vue_methods = {
             return sanitized;
         };
 
-        let messagesPayload = max_rounds === 0 ? prepareMessages(this.messages) : prepareMessages(this.messages.slice(-max_rounds));
+        let messagesPayload = prepareMessages(this.messages);
         console.log(messagesPayload);
         let currentMsg;
 
@@ -10805,7 +10804,7 @@ stopTTSActivities() {
   // 修改：保留原有的截图逻辑，参数 hideMainWindow 决定是否隐藏
   async toggleScreenshot(hideMainWindow = true) {
     try {
-      // 1. 调用遮罩，并传入是否隐藏的参数
+      // 1. 调用遮罩
       const rect = await window.electronAPI.showScreenshotOverlay(hideMainWindow)
       
       if (!rect) return // 用户取消
@@ -10813,17 +10812,34 @@ stopTTSActivities() {
       // 2. 裁剪
       const buf = await window.electronAPI.cropDesktop({ rect })
 
-      // 3. 保存
+      // 3. 创建 Blob 和 File
       const blob = new Blob([buf], { type: 'image/png' })
       const file = new File([blob], `desktop_${Date.now()}.png`, { type: 'image/png' })
-      this.images.push({ file, name: file.name, path: '' })
+
+      // 4. ★ 关键修复：创建本地 URL 用于预览，并推入 images 数组
+      const localUrl = URL.createObjectURL(blob)
+      
+      // 推入 images 数组（假设 allItems 是计算属性包含 images）
+      this.images.push({ 
+        file, 
+        name: file.name, 
+        path: localUrl,  // ★ 使用 blob URL 而不是空字符串
+        type: 'image'    // ★ 明确标记类型，便于 allItems 处理
+      })
+
+      // ★ 如果 allItems 是独立数组，也需要同步推送
+      // this.allItems.push({
+      //   name: file.name,
+      //   path: localUrl,
+      //   type: 'image',
+      //   file: file
+      // })
+
     } catch (e) {
-      console.error(e)
+      console.error('截图失败:', e)
     } finally {
-      // 4. 清理并恢复窗口
+      // 5. 清理并恢复窗口
       await window.electronAPI.cancelScreenshotOverlay();
-      // 只有当之前隐藏了窗口，才需要在这里强制显示。
-      // 这里直接调用 show 是安全的，因为如果窗口本来是显示的，这个调用不会有副作用
       window.electronAPI.windowAction('show');
     }
   },
