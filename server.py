@@ -2491,7 +2491,7 @@ async def generate_stream_response(client,reasoner_client, request: ChatRequest,
             # 修复字符串拼接错误
             content_append(request.messages, 'system', fileLinks_message)
             source_prompt += fileLinks_message
-        user_prompt = request.messages[-1]['content']
+        user_prompt = request.messages[-1].get('content') or ""
         if settings["memorySettings"]["is_memory"] and settings["memorySettings"]["selectedMemory"] and settings["memorySettings"]["selectedMemory"] != ""  and not request.is_sub_agent:
             if settings["memorySettings"]["userName"]:
                 print("添加用户名：\n\n" + settings["memorySettings"]["userName"] + "\n\n用户名结束\n\n")
@@ -3714,6 +3714,8 @@ async def generate_stream_response(client,reasoner_client, request: ChatRequest,
                             extra_body = extra_params, # 其他参数
                         )
                         response_content = response.choices[0].message.content
+                        if response_content is None:
+                            response_content = ""
                         # 用re 提取```json 包裹json字符串 ```
                         if "```json" in response_content:
                             try:
@@ -4183,7 +4185,7 @@ async def generate_complete_response(client,reasoner_client, request: ChatReques
             # 修复字符串拼接错误
             content_append(request.messages, 'system', system_message)
         kb_list = []
-        user_prompt = request.messages[-1]['content']
+        user_prompt = request.messages[-1].get('content') or ""
         if settings["memorySettings"]["is_memory"] and settings["memorySettings"]["selectedMemory"] and settings["memorySettings"]["selectedMemory"] != "":
             if settings["memorySettings"]["userName"] and settings["memorySettings"]["userName"] != "user":
                 print("添加用户名：\n\n" + settings["memorySettings"]["userName"] + "\n\n用户名结束\n\n")
@@ -4494,6 +4496,9 @@ async def generate_complete_response(client,reasoner_client, request: ChatReques
                 extra_body = extra_params, # 其他参数
             )
             response_content = research_response.choices[0].message.content
+            if response_content is None:
+                response_content = ""
+
             # 用re 提取```json 包裹json字符串 ```
             if "```json" in response_content:
                 try:
